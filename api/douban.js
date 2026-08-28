@@ -33,7 +33,10 @@ function parseComments(html) {
     const avatar = (block.match(/<img[^>]*src="([^"]+)"/) || [])[1] || '';
     const time = extractRe(block, /<span[^>]*class="[^"]*\bpubtime[^"]*"[^>]*>([\s\S]*?)<\/span>/);
     const content = extractRe(block, /<div[^>]*class="[^"]*\breply-content[^"]*"[^>]*>([\s\S]*?)<\/div>/);
-    if (content) comments.push({ author, time, content, avatar });
+    let likes = 0;
+    const vm = block.match(/data-votecount="(\d+)"/) || block.match(/<span[^>]*class="[^"]*\bvote[^"]*"[^>]*>\s*\(?\s*(\d+)\s*\)?/) || block.match(/class="[^"]*comment-vote[^"]*"[^>]*>[\s\S]*?<span[^>]*>(\d+)</);
+    if (vm) likes = +vm[1];
+    if (content) comments.push({ author, time, content, avatar, likes });
   }
   return comments;
 }
