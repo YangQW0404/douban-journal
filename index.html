@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>豆瓣手账 · 帖子评论收藏</title>
+<style>
+  :root{ --paper:#faf6ef; --ink:#4a4038; --accent:#e8837b; --tape:#f9d7a8; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#efe9de;font-family:"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);min-height:100vh}
+  .wrap{max-width:860px;margin:0 auto;padding:28px 18px 80px}
+  h1{font-size:26px;text-align:center;letter-spacing:2px;margin-bottom:6px}
+  .sub{text-align:center;font-size:13px;color:#9a8f83;margin-bottom:26px}
+  .card{background:#fff;border-radius:14px;padding:22px;box-shadow:0 2px 12px rgba(90,70,40,.08);margin-bottom:20px}
+  .row{display:flex;gap:10px}
+  input[type=text]{flex:1;border:2px solid #e5dccd;border-radius:10px;padding:11px 14px;font-size:15px;outline:none;background:#fffdf9}
+  input[type=text]:focus{border-color:var(--accent)}
+  button{border:none;border-radius:10px;padding:11px 20px;font-size:15px;cursor:pointer;background:var(--accent);color:#fff;transition:.15s}
+  button:disabled{background:#d8cfc2;cursor:not-allowed}
+  button.ghost{background:#fff;color:var(--ink);border:2px solid #e5dccd}
+  .msg{margin-top:12px;font-size:13px;color:#b0655e;min-height:18px}
+  .post-head{margin-bottom:14px}
+  .post-title{font-size:19px;font-weight:600;margin-bottom:6px}
+  .post-meta{font-size:12px;color:#a09486;margin-bottom:12px}
+  .post-content{white-space:pre-wrap;font-size:14px;line-height:1.8;background:var(--paper);border-radius:10px;padding:14px 16px;max-height:260px;overflow:auto}
+  .post-imgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .post-imgs img{width:84px;height:84px;object-fit:cover;border-radius:8px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin:18px 0 10px;font-size:13px;color:#8a7f72}
+  .toolbar b{color:var(--accent)}
+  .cmt{display:flex;gap:12px;padding:13px 10px;border-bottom:1px dashed #eee4d4;align-items:flex-start}
+  .cmt input[type=checkbox]{width:18px;height:18px;margin-top:3px;accent-color:var(--accent);flex-shrink:0;cursor:pointer}
+  .cmt .body{flex:1;cursor:pointer}
+  .cmt .who{font-size:12px;color:#b0a494;margin-bottom:3px}
+  .cmt .txt{font-size:14px;line-height:1.7;white-space:pre-wrap}
+  .cmt.selected{background:#fdf3ee;border-radius:8px}
+  .actions{display:flex;gap:12px;justify-content:center;margin-top:26px;flex-wrap:wrap}
+  #previewBox{display:none;text-align:center}
+  #canvasOut{max-width:100%;border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.15)}
+  .more{width:100%;margin-top:14px;background:#fff;color:var(--ink);border:2px dashed #e0d5c2}
+  .empty{padding:8px;font-size:13px;color:#b0a494}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📖 豆瓣手账</h1>
+  <div class="sub">粘贴豆瓣小组帖子链接 → 勾选想收藏的评论 → 生成手账图片</div>
+
+  <div class="card">
+    <div class="row">
+      <input type="text" id="urlInput" placeholder="https://www.douban.com/group/topic/xxxxxxx/">
+      <button id="fetchBtn">抓取帖子</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="card" id="postCard" style="display:none">
+    <div class="post-head">
+      <div class="post-title" id="pTitle"></div>
+      <div class="post-meta" id="pMeta"></div>
+      <div class="post-content" id="pContent"></div>
+      <div class="post-imgs" id="pImgs"></div>
+    </div>
+    <div class="toolbar">
+      <span>评论 · 已选 <b id="selCount">0</b> 条</span>
+      <span><a href="javascript:;" id="selAll" style="color:#e8837b">全选</a> · <a href="javascript:;" id="selNone" style="color:#e8837b">取消</a></span>
+    </div>
+    <div id="cmtList"></div>
+    <button class="more" id="moreBtn" style="display:none">加载更多评论 ↓</button>
+    <div class="actions">
+      <button id="makeBtn">✂️ 生成手账图片</button>
+      <button class="ghost" id="reBtn">换一篇</button>
+    </div>
+  </div>
+
+  <div class="card" id="previewBox">
+    <div class="sub" style="margin:10px 0 16px">长按或右键保存图片</div>
+    <canvas id="canvasOut"></canvas>
+    <div class="actions">
+      <button id="dlBtn">下载图片</button>
+      <button class="ghost" id="backBtn">返回修改勾选</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let state = { url:'', comments:[], start:0, hasMore:false };
+
+// ---------- 抓取 ----------
+async function fetchDouban(url, start){
+  const q = start !== undefined ? `?url=${encodeURIComponent(url)}&start=${start}` : `?url=${encodeURIComponent(url)}`;
+  const r = await fetch('/api/douban' + q);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || '抓取失败');
+  return j;
+}
+
+$('fetchBtn').onclick = async () => {
+  const url = $('urlInput').value.trim();
+  if (!url) { $('msg').textContent = '先粘贴一个豆瓣帖子链接～'; return; }
+  $('fetchBtn').disabled = true; $('fetchBtn').textContent = '抓取中…'; $('msg').textContent = '';
+  try {
+    const data = await fetchDouban(url);
+    state = { url, comments: data.comments || [], start: (data.comments||[]).length, hasMore:(data.comments||[]).length >= 95 };
+    $('pTitle').textContent = data.title || '(无标题)';
+    $('pMeta').textContent = (data.author ? data.author + ' · ' : '') + (data.time || '') + ' · ' + url;
+    $('pContent').textContent = data.content || '(正文为空或需要登录查看)';
+    $('pImgs').innerHTML = (data.images||[]).map(s=>`<img src="${s}" crossorigin="anonymous" onerror="this.style.display='none'">`).join('');
+    renderComments();
+    $('postCard').style.display = 'block';
+    window.scrollTo({top: $('postCard').offsetTop - 20, behavior:'smooth'});
+  } catch(e){ $('msg').textContent = e.message; }
+  $('fetchBtn').disabled = false; $('fetchBtn').textContent = '抓取帖子';
+};
+
+$('moreBtn').onclick = async () => {
+  $('moreBtn').disabled = true;
+  try {
+    const data = await fetchDouban(state.url, state.start);
+    state.comments.push(...(data.comments||[]));
+    state.start += (data.comments||[]).length;
+    state.hasMore = (data.comments||[]).length >= 95;
+    renderComments();
+  } catch(e){ alert(e.message); }
+  $('moreBtn').disabled = false;
+};
+
+// ---------- 评论列表 ----------
+function renderComments(){
+  const box = $('cmtList');
+  box.innerHTML = state.comments.map((c,i)=>`
+    <div class="cmt" data-i="${i}">
+      <input type="checkbox">
+      <div class="body">
+        <div class="who">${esc(c.author||'匿名')} ${c.time||''}</div>
+        <div class="txt">${esc(c.content)}</div>
+      </div>
+    </div>`).join('') || '<div class="empty">这篇帖子没有抓到评论，或帖子需要登录才能看评论。</div>';
+  box.querySelectorAll('.cmt').forEach(el=>{
+    const i = +el.dataset.i;
+    const toggle = on => { el.querySelector('input').checked = on; el.classList.toggle('selected', on); updateCount(); };
+    el.querySelector('input').onchange = e => toggle(e.target.checked);
+    el.querySelector('.body').onclick = () => toggle(!el.querySelector('input').checked);
+  });
+  $('moreBtn').style.display = state.hasMore ? 'block' : 'none';
+  updateCount();
+}
+function selectedComments(){ return [...document.querySelectorAll('.cmt')].filter(el=>el.querySelector('input').checked).map(el=>state.comments[+el.dataset.i]); }
+function updateCount(){ $('selCount').textContent = document.querySelectorAll('.cmt input:checked').length; }
+$('selAll').onclick = () => document.querySelectorAll('.cmt input').forEach((c,i)=>{ c.checked=true; c.closest('.cmt').classList.add('selected'); updateCount(); });
+$('selNone').onclick = () => document.querySelectorAll('.cmt input').forEach(c=>{ c.checked=false; c.closest('.cmt').classList.remove('selected'); updateCount(); });
+$('reBtn').onclick = () => { $('postCard').style.display='none'; $('previewBox').style.display='none'; window.scrollTo({top:0}); };
+const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+// ---------- 手账图片生成 ----------
+const WASHI = ['rgba(249,215,168,.75)','rgba(232,131,123,.55)','rgba(176,205,166,.6)','rgba(196,181,222,.55)'];
+const NOTE_BG = ['#fdf3ee','#eef4ea','#f3effb','#fdf8e3'];
+
+function wrapText(ctx, text, maxW){
+  const lines = [];
+  for (const para of String(text).split('\n')) {
+    if (!para) { lines.push(''); continue; }
+    let line = '';
+    for (const ch of para) {
+      if (ctx.measureText(line + ch).width > maxW) { lines.push(line); line = ch; }
+      else line += ch;
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
+function roundRect(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+function tape(ctx,x,y,w,color,rot){
+  ctx.save(); ctx.translate(x,y); ctx.rotate(rot);
+  ctx.fillStyle = color;
+  ctx.fillRect(-w/2,-14,w,28);
+  ctx.fillStyle = 'rgba(255,255,255,.25)';
+  ctx.fillRect(-w/2,-14,w,8);
+  ctx.restore();
+}
+
+$('makeBtn').onclick = async () => {
+  const cmts = selectedComments();
+  if (!cmts.length) { alert('先勾选至少一条评论～'); return; }
+  $('makeBtn').disabled = true; $('makeBtn').textContent = '生成中…';
+  try { await drawJournal(cmts); $('previewBox').style.display='block'; window.scrollTo({top:$('previewBox').offsetTop-20,behavior:'smooth'}); }
+  catch(e){ alert('生成失败：'+e.message); }
+  $('makeBtn').disabled = false; $('makeBtn').textContent = '✂️ 生成手账图片';
+};
+
+function drawJournal(cmts){
+  return new Promise(resolve => {
+    const W = 1000, M = 64;
+    const cv = $('canvasOut'), ctx = cv.getContext('2d');
+    // 预排版，算高度
+    ctx.font = '15px "PingFang SC","Microsoft YaHei",sans-serif';
+    const maxW = W - M*2 - 60;
+    const titleLines = wrapText(ctx, $('pTitle').textContent, maxW);
+    const contentLines = wrapText(ctx, ($('pContent').textContent||'').slice(0,600), maxW);
+    const cmtLines = cmts.map(c => ({ who:c.author||'匿名', lines: wrapText(ctx, c.content, maxW-24) }));
+    const titleH = 70 + titleLines.length*30;
+    const contentH = 40 + contentLines.length*26;
+    const cmtH = cmtLines.reduce((s,c)=> s + 66 + c.lines.length*24, 0);
+    const H = Math.max(900, M*2 + titleH + contentH + cmtH + 130);
+
+    cv.width = W; cv.height = H; cv.style.width = 'min(100%, 620px)';
+    // 纸张底
+    ctx.fillStyle = '#faf6ef'; ctx.fillRect(0,0,W,H);
+    // 点阵网格
+    ctx.fillStyle = 'rgba(170,150,120,.22)';
+    for (let x=40;x<W;x+=34) for (let y=40;y<H;y+=34) { ctx.beginPath(); ctx.arc(x,y,1.4,0,7); ctx.fill(); }
+    // 胶带装饰（四角）
+    tape(ctx, M+90, 34, 120, WASHI[0], -.12);
+    tape(ctx, W-M-90, 34, 120, WASHI[1], .1);
+    // 日期戳
+    const d = new Date();
+    ctx.fillStyle = '#b9ab99'; ctx.font = '13px sans-serif'; ctx.textAlign='right';
+    ctx.fillText(`📖 收藏于 ${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`, W-M, 62);
+    ctx.textAlign='left';
+
+    let y = M + 46;
+    // 标题区
+    ctx.fillStyle = '#4a4038'; ctx.font = 'bold 27px "PingFang SC","Microsoft YaHei",sans-serif';
+    titleLines.forEach(l => { ctx.fillText(l, M, y); y += 34; });
+    y += 6;
+    ctx.strokeStyle = '#e8837b'; ctx.lineWidth = 3; ctx.setLineDash([10,7]);
+    ctx.beginPath(); ctx.moveTo(M,y); ctx.lineTo(M+180,y); ctx.stroke(); ctx.setLineDash([]);
+    y += 24;
+    ctx.fillStyle = '#a09486'; ctx.font = '13px sans-serif';
+    ctx.fillText($('pMeta').textContent.split('·')[0].trim().slice(0,30), M, y);
+    y += 26;
+
+    // 正文（若太长截断）
+    if (contentLines.length){
+      ctx.fillStyle = '#6b5f53'; ctx.font = '15px "PingFang SC","Microsoft YaHei",sans-serif';
+      contentLines.slice(0,18).forEach(l => { ctx.fillText(l, M, y); y += 26; });
+      if (contentLines.length > 18) { ctx.fillStyle='#b0a494'; ctx.font='13px sans-serif'; ctx.fillText('……（正文太长已截断，完整内容见原帖）', M, y); y += 24; }
+      y += 18;
+    }
+
+    // 评论便签
+    cmtLines.forEach((c,idx) => {
+      const h = 46 + c.lines.length*24;
+      ctx.save();
+      // 阴影
+      ctx.shadowColor = 'rgba(90,70,40,.18)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 4;
+      ctx.fillStyle = NOTE_BG[idx % 4];
+      ctx.translate(M + (idx%2? 12 : 0), 0);
+      roundRect(ctx, M*0 + 0, y, W - M*2 - 20, h, 10); ctx.fill();
+      ctx.restore();
+      // 便签上的小胶带
+      tape(ctx, W/2 + (idx%2? -30:30), y+4, 70, WASHI[idx % 4], (idx%2? -1:1)*.15);
+      // 楼层号
+      ctx.fillStyle = '#e8837b'; ctx.font = 'bold 13px sans-serif';
+      ctx.fillText('#' + (idx+1), M + 22, y + 28);
+      ctx.fillStyle = '#9a8f83'; ctx.font = '13px sans-serif';
+      ctx.fillText(c.who.slice(0,20), M + 52, y + 28);
+      ctx.fillStyle = '#4a4038'; ctx.font = '15px "PingFang SC","Microsoft YaHei",sans-serif';
+      let ly = y + 52;
+      c.lines.forEach(l => { ctx.fillText(l, M + 22, ly); ly += 24; });
+      y += h + 22;
+    });
+
+    // 页脚
+    ctx.fillStyle = '#c3b6a5'; ctx.font = '12px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('— 豆瓣手账 · ' + cmts.length + ' 条珍藏评论 —', W/2, H - 40);
+    ctx.textAlign='left';
+    resolve();
+  });
+}
+
+$('dlBtn').onclick = () => {
+  const a = document.createElement('a');
+  a.download = '豆瓣手账_' + Date.now() + '.png';
+  a.href = $('canvasOut').toDataURL('image/png');
+  a.click();
+};
+$('backBtn').onclick = () => { $('previewBox').style.display='none'; };
+</script>
+</body>
+</html>
