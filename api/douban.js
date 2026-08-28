@@ -34,7 +34,15 @@ function parseComments(html) {
     const time = extractRe(block, /<span[^>]*class="[^"]*\bpubtime[^"]*"[^>]*>([\s\S]*?)<\/span>/);
     const content = extractRe(block, /<div[^>]*class="[^"]*\breply-content[^"]*"[^>]*>([\s\S]*?)<\/div>/);
     let likes = 0;
-    const vm = block.match(/data-votecount="(\d+)"/) || block.match(/<span[^>]*class="[^"]*\bvote[^"]*"[^>]*>\s*\(?\s*(\d+)\s*\)?/) || block.match(/class="[^"]*comment-vote[^"]*"[^>]*>[\s\S]*?<span[^>]*>(\d+)</);
+    // 多种结构匹配：data-votecount / vote count span / likes class
+    const vm =
+      block.match(/data-votecount="(\d+)"/) ||
+      block.match(/class="[^"]*\bvotecount[^"]*"[^>]*>\s*(\d+)\s*</) ||
+      block.match(/class="[^"]*\bcomment-vote[^"]*"[^>]*>[\s\S]*?<span[^>]*>\s*(\d+)\s*</) ||
+      block.match(/<span[^>]*class="[^"]*\bvote-count[^"]*"[^>]*>\s*(\d+)\s*</) ||
+      block.match(/<span[^>]*class="[^"]*\blikes-count[^"]*"[^>]*>\s*(\d+)\s*</) ||
+      block.match(/<span[^>]*class="[^"]*\bpraise[^"]*"[^>]*>[\s\S]*?(\d+)[\s\S]*?</) ||
+      block.match(/<div[^>]*class="[^"]*\bcomment-votes?[^"]*"[^>]*>[\s\S]*?(\d+)[\s\S]*?</);
     if (vm) likes = +vm[1];
     if (content) comments.push({ author, time, content, avatar, likes });
   }
@@ -89,6 +97,11 @@ export default async function handler(req, res) {
       data.topicId = (url.match(/topic\/(\d+)/) || [])[1] || '';
     }
     data.comments = parseComments(html);
+    // 总评论数（豆瓣小组帖子显示 "共 xxx 条回复"）
+    if (!start) {
+      const tm = html.match(/共\s*(\d+)\s*条回复/) || html.match(/(\d+)\s*条回复/);
+      data.totalComments = tm ? +tm[1] : (data.comments ? data.comments.length : 0);
+    }
     return res.status(200).json(data);
   } catch (e) {
     return res.status(502).json({ error: e.message || '抓取失败' });
