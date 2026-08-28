@@ -267,19 +267,93 @@ let currentBlobUrl = null;
 let currentEntry = null; // {title,url,author,time,comments,imgDataUrl}
 
 // ============ 存储：本地 + 云端（Supabase，登录后启用） ============
-const LS_KEY = 'dj_notebooks_v1';
+const LS_KEY = 'dj_notebooks_v1'; // 仅存元数据（不含图片）的缓存键
+// ============ 图片存储：IndexedDB（容量大，长图不丢） ============
+const IDB_NAME = 'douban-journal', IDB_STORE = 'images';
+function idbOpen(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbPut(key, dataUrl){
+  try{
+    const db = await idbOpen();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(dataUrl, key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  }catch(e){ return false; }
+}
+async function idbGet(key){
+  try{
+    const db = await idbOpen();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const r = tx.objectStore(IDB_STORE).get(key);
+      r.onsuccess = () => resolve(r.result || null);
+      r.onerror = () => resolve(null);
+    });
+  }catch(e){ return null; }
+}
+async function idbDel(key){
+  try{
+    const db = await idbOpen();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).delete(key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  }catch(e){ return false; }
+}
+
+// ============ 手账本数据：元数据存 localStorage，图片存 IndexedDB ============
+function metaOf(books){ // 剥离图片为引用，避免撑爆 localStorage
+  return books.map(b => ({ ...b, cover: b.cover && b.cover.startsWith('data:') ? ('idb://cover/'+b.id) : b.cover,
+    entries: (b.entries||[]).map(e => ({ ...e, thumbDataUrl: undefined,
+      imgDataUrl: e.imgDataUrl && e.imgDataUrl.startsWith('data:') ? ('idb://img/'+e.id) : e.imgDataUrl, fullDataUrl: undefined })) }));
+}
+async function saveBooks(books){
+  // 图片写入 IndexedDB
+  for (const b of books){
+    if (b.cover && b.cover.startsWith('data:')) await idbPut('cover/'+b.id, b.cover);
+    for (const e of (b.entries||[])){
+      if (e.imgDataUrl && e.imgDataUrl.startsWith('data:')) await idbPut('img/'+e.id, e.imgDataUrl);
+    }
+  }
+  // 元数据写 localStorage（小，不会超限）
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(metaOf(books))); }
+  catch(e){ alert('保存失败：' + e.message); return false; }
+  booksCache = books; // 缓存保持含图版本
+  cloudSave(books); // 云端存完整数据（含图）
+  return true;
+}
+// 同步读缓存（页面加载时 hydrate 一次）；未初始化时返回 localStorage 原始数据
+function loadBooks(){ return booksCache || (booksCache = (function(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)) || []; }catch(e){ return []; } })()); }
+let booksCache = null;
+// 读取时把 idb:// 引用还原为真实图片
+async function hydrateBooks(){
+  const books = loadBooks();
+  for (const b of books){
+    if (b.cover && b.cover.startsWith('idb://')) b.cover = (await idbGet(b.cover.slice(6))) || '';
+    for (const e of (b.entries||[])){
+      if (e.imgDataUrl && e.imgDataUrl.startsWith('idb://')) e.imgDataUrl = (await idbGet(e.imgDataUrl.slice(6))) || '';
+    }
+  }
+  booksCache = books;
+  return books;
+}
 const SB_URL = window.SUPABASE_URL || '';
 const SB_KEY = window.SUPABASE_ANON_KEY || '';
 let sb = null; // supabase client
 let currentUser = null;
 if (SB_URL && SB_KEY && window.supabase) {
   sb = window.supabase.createClient(SB_URL, SB_KEY);
-}
-function loadBooks(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)) || []; }catch(e){ return []; } }
-function saveBooks(books){
-  try{ localStorage.setItem(LS_KEY, JSON.stringify(books)); }catch(e){ alert('保存失败：存储空间不足（图片太多）。可删除一些旧手账本腾出空间。'); return false; }
-  cloudSave(books); // 登录态下异步同步云端，失败不打断
-  return true;
 }
 async function cloudSave(books){
   if (!sb || !currentUser) return;
@@ -359,20 +433,32 @@ async function afterLogin(){
       // 首次登录：把本地数据上传云端
       if (local.length) { cloudSave(local); setSyncNote('本地手账本已上传云端 ✓'); }
     } else {
-      // 云端已有：云端为准（本地有而云端没有的旧数据会被覆盖，已提示）
-      localStorage.setItem(LS_KEY, JSON.stringify(cloud));
-      if (local.length && JSON.stringify(local) !== JSON.stringify(cloud)) {
-        // 简单合并：以云端为主，补上云端缺的本子
-        const cloudIds = new Set(cloud.map(b=>b.id));
-        const extra = local.filter(b=>!cloudIds.has(b.id));
-        const merged = cloud.concat(extra);
-        localStorage.setItem(LS_KEY, JSON.stringify(merged));
-        cloudSave(merged);
-      }
+      // 云端已有：云端为主，补上云端缺的本子
+      const cloudIds = new Set(cloud.map(b=>b.id));
+      const extra = local.filter(b=>!cloudIds.has(b.id));
+      const merged = cloud.concat(extra);
+      await saveBooks(merged);
     }
   }catch(e){ setSyncNote('云端读取失败，当前使用本地数据'); }
   renderBooks();
 }
+// 启动迁移：旧版数据（图片直接塞 localStorage）自动搬到 IndexedDB
+(async function migrate(){
+  try{
+    let old;
+    try{ old = JSON.parse(localStorage.getItem(LS_KEY)); }catch(e){ old = null; }
+    if (old && !localStorage.getItem('dj_migrated_v2')){
+      const hasInline = old.some(b => (b.cover&&b.cover.startsWith('data:')) || (b.entries||[]).some(e=>e.imgDataUrl&&e.imgDataUrl.startsWith('data:')));
+      if (hasInline){
+        await saveBooks(old); // 写 IndexedDB + 元数据
+        localStorage.setItem('dj_migrated_v2', '1');
+      }
+    }
+  }catch(e){}
+  await hydrateBooks();
+  renderBooks();
+})();
+
 // 会话恢复
 (async function initAuth(){
   if (!sb) { renderAuthBar(); return; }
@@ -382,7 +468,7 @@ async function afterLogin(){
       currentUser = data.session.user;
       renderAuthBar();
       const cloud = await cloudLoad();
-      if (cloud) localStorage.setItem(LS_KEY, JSON.stringify(cloud));
+      if (cloud && cloud.length) await saveBooks(cloud);
       renderBooks();
     }
   }catch(e){}
@@ -686,17 +772,99 @@ $('saveToBookBtn').onclick = () => {
   sel.innerHTML = books.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');
   $('saveBookRow').style.display = 'flex';
 };
-$('confirmSaveBook').onclick = () => {
+// 轻量存储：只存文字数据，查看时现场重绘（drawEntry）
+function drawEntry(cv, entry){
+  return new Promise(resolve => {
+    const cmts = [...(entry.comments||[])].sort((a,b)=>(b.likes||0)-(a.likes||0));
+    const W = 1000, M = 56;
+    const ctx = cv.getContext('2d');
+    const maxW = W - M*2 - 64;
+    const FS = { title: 42, cmt: 30, content: 26, meta: 24 };
+    ctx.font = `${FS.title}px ${FONT}`;
+    const titleLines = wrapText(ctx, entry.title || '(无标题)', maxW);
+    ctx.font = `${FS.content}px ${FONT}`;
+    const contentLines = wrapText(ctx, (entry.content||'').slice(0,500), maxW);
+    const cmtLines = cmts.map(c => { ctx.font = `${FS.cmt}px ${FONT}`; return { who:c.author||'匿名', likes:c.likes||0, lines: wrapText(ctx, c.content, maxW-40) }; });
+    const titleH = 90 + titleLines.length*(FS.title+8);
+    const contentH = contentLines.length ? 50 + contentLines.length*(FS.content+16) : 0;
+    const cmtH = cmtLines.reduce((s,c)=> s + 100 + c.lines.length*(FS.cmt+14), 0);
+    const H = Math.max(1000, M*2 + titleH + contentH + cmtH + 150);
+    cv.width = W; cv.height = H;
+    ctx.fillStyle = '#faf6ef'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = 'rgba(170,150,120,.22)';
+    for (let x=40;x<W;x+=36) for (let y=40;y<H;y+=36) { ctx.beginPath(); ctx.arc(x,y,1.6,0,7); ctx.fill(); }
+    tape(ctx, M+110, 38, 130, WASHI[0], -.12);
+    tape(ctx, W-M-110, 38, 130, WASHI[1], .1);
+    const d = new Date((entry.ts||Date.now()));
+    ctx.fillStyle = '#b9ab99'; ctx.font = '24px sans-serif'; ctx.textAlign='right';
+    ctx.fillText(`收藏于 ${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`, W-M, 72);
+    ctx.textAlign='left';
+    let y = M + 60;
+    ctx.fillStyle = '#4a4038'; ctx.font = `bold ${FS.title}px ${FONT}`;
+    titleLines.forEach(l => { ctx.fillText(l, M, y); y += FS.title+8; });
+    y += 8;
+    ctx.strokeStyle = '#e8837b'; ctx.lineWidth = 4; ctx.setLineDash([12,8]);
+    ctx.beginPath(); ctx.moveTo(M,y); ctx.lineTo(M+220,y); ctx.stroke(); ctx.setLineDash([]);
+    y += 34;
+    ctx.fillStyle = '#a09486'; ctx.font = '24px sans-serif';
+    ctx.fillText((entry.author||'').split('·')[0].trim().slice(0,30), M, y);
+    y += 32;
+    ctx.fillStyle = '#e8837b'; ctx.font = `24px ${FONT}`;
+    ctx.fillText('🔗 原帖：见页面「点击打开原帖」按钮', M, y);
+    y += 40;
+    if (contentLines.length){
+      ctx.fillStyle = '#6b5f53'; ctx.font = `${FS.content}px ${FONT}`;
+      contentLines.slice(0,12).forEach(l => { ctx.fillText(l, M, y); y += FS.content+16; });
+      if (contentLines.length > 12) { ctx.fillStyle='#b0a494'; ctx.font='22px sans-serif'; ctx.fillText('……（正文太长已截断）', M, y); y += 34; }
+      y += 20;
+    }
+    cmtLines.forEach((c,idx) => {
+      const h = 66 + c.lines.length*(FS.cmt+14);
+      ctx.save();
+      ctx.shadowColor = 'rgba(90,70,40,.18)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 5;
+      ctx.fillStyle = NOTE_BG[idx % 4];
+      roundRect(ctx, M + (idx%2? 14 : 0), y, W - M*2 - 24, h, 12); ctx.fill();
+      ctx.restore();
+      tape(ctx, W/2 + (idx%2? -34:34), y+5, 76, WASHI[idx % 4], (idx%2? -1:1)*.15);
+      ctx.fillStyle = '#e8837b'; ctx.font = 'bold 24px sans-serif';
+      ctx.fillText('#' + (idx+1), M + 26, y + 42);
+      ctx.fillStyle = '#9a8f83'; ctx.font = '23px sans-serif';
+      ctx.fillText((c.who.slice(0,16) || '匿名'), M + 76, y + 42);
+      ctx.fillStyle = '#e8a19b'; ctx.font = '23px sans-serif'; ctx.textAlign='right';
+      ctx.fillText('👍 ' + c.likes, W - M - 40, y + 42);
+      ctx.textAlign='left';
+      ctx.fillStyle = '#4a4038'; ctx.font = `${FS.cmt}px ${FONT}`;
+      let ly = y + 82;
+      c.lines.forEach(l => { ctx.fillText(l, M + 26, ly); ly += FS.cmt+14; });
+      y += h + 26;
+    });
+    ctx.fillStyle = '#c3b6a5'; ctx.font = '22px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('— 豆瓣手账 · ' + cmts.length + ' 条珍藏评论 —', W/2, H - 46);
+    ctx.textAlign='left';
+    resolve(cv);
+  });
+}
+
+// 灯箱兼容：条目无图时现场重绘
+async function entryImgOf(e){
+  if (e.imgDataUrl && e.imgDataUrl.startsWith('data:')) return e.imgDataUrl;
+  const cv = document.createElement('canvas');
+  await drawEntry(cv, e);
+  return cv.toDataURL('image/jpeg', 0.85);
+}
+
+$('confirmSaveBook').onclick = async () => {
   if (!currentEntry) return;
   const books = loadBooks();
   const b = books.find(x=>x.id === $('bookSelect').value);
   if (!b) return;
+  // 轻量条目：只存文字，不存图片
   b.entries.unshift({ id: Date.now()+''+Math.floor(Math.random()*999),
-    date: new Date().toLocaleDateString('zh-CN'),
+    date: new Date().toLocaleDateString('zh-CN'), ts: Date.now(),
     title: currentEntry.title, url: currentEntry.url,
-    imgDataUrl: (currentEntry.imgDataUrl && currentEntry.imgDataUrl.startsWith('data:')) ? currentEntry.imgDataUrl : (currentEntry.fullDataUrl || ''),
+    author: currentEntry.author, content: $('pContent').textContent.slice(0,500),
     comments: currentEntry.comments });
-  if (saveBooks(books)) {
+  if (await saveBooks(books)) {
     alert('已存入手账本「' + b.name + '」✅');
     $('saveBookRow').style.display = 'none';
   }
@@ -704,9 +872,12 @@ $('confirmSaveBook').onclick = () => {
 
 // ============ 手账查看灯箱（左右滑动） ============
 let lbEntries = [], lbIndex = 0;
-function openLightbox(entries, idx){
+async function openLightbox(entries, idx){
   lbEntries = entries; lbIndex = idx;
-  $('lbTrack').innerHTML = entries.map(e=>`<div class="lb-item"><img src="${e.imgDataUrl}" alt=""></div>`).join('');
+  // 轻量条目现场重绘；有图的直接用
+  const urls = [];
+  for (const e of entries){ urls.push(await entryImgOf(e)); }
+  $('lbTrack').innerHTML = urls.map(u=>`<div class="lb-item"><img src="${u}" alt=""></div>`).join('');
   $('lightbox').classList.add('show');
   document.body.style.overflow = 'hidden';
   lbUpdate();
@@ -785,8 +956,15 @@ function openBook(id){
 $('backBooks').onclick = ()=>{ $('booksHome').style.display='block'; $('bookDetail').style.display='none'; };
 
 // ============ 条目渲染：九宫格 / 时间线 双视图 + 编辑操作 ============
-function renderEntries(){
+async function renderEntries(){
   const b = loadBooks().find(x=>x.id===currentBookId); if(!b) return;
+  // 轻量条目（无图）现场生成缩略图
+  for (const e of b.entries){
+    if (!e.thumbDataUrl){
+      if (e.imgDataUrl && e.imgDataUrl.startsWith('data:')) e.thumbDataUrl = e.imgDataUrl;
+      else { const u = await entryImgOf(e); e.thumbDataUrl = u; }
+    }
+  }
   $('viewGrid').classList.toggle('active', currentView==='grid');
   $('viewTimeline').classList.toggle('active', currentView==='timeline');
   $('entryEmpty').style.display = b.entries.length ? 'none':'block';
@@ -795,7 +973,7 @@ function renderEntries(){
     grid.style.display = 'grid';
     grid.innerHTML = b.entries.map(e=>`
       <div class="entry-card" data-id="${e.id}">
-        <img class="entry-thumb" src="${e.imgDataUrl}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22150%22 height=%22150%22%3E%3Crect fill=%22%23faf6ef%22 width=%22150%22 height=%22150%22/%3E%3Ctext x=%2275%22 y=%2280%22 text-anchor=%22middle%22 fill=%22%23b0a494%22 font-size=%2212%22%3E图片已失效%3C/text%3E%3C/svg%3E'">
+        <img class="entry-thumb" src="${e.thumbDataUrl || e.imgDataUrl}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22150%22 height=%22150%22%3E%3Crect fill=%22%23faf6ef%22 width=%22150%22 height=%22150%22/%3E%3Ctext x=%2275%22 y=%2280%22 text-anchor=%22middle%22 fill=%22%23b0a494%22 font-size=%2212%22%3E图片已失效%3C/text%3E%3C/svg%3E'">
         <div class="entry-title">${esc(e.title)}<br><span style="color:#c3b6a5;font-size:11px">${e.date} · ${(e.comments||[]).length}条评论</span></div>
         <div class="entryOps">
           <button data-act="move" data-id="${e.id}">移动</button>
@@ -812,7 +990,7 @@ function renderEntries(){
       <div class="tl-group">
         <div class="tl-date">${esc(d)}</div>
         <div class="tl-row">
-          ${groups[d].map(e=>`<img class="tl-thumb" src="${e.imgDataUrl}" data-id="${e.id}" title="${esc(e.title)}">`).join('')}
+          ${groups[d].map(e=>`<img class="tl-thumb" src="${e.thumbDataUrl || e.imgDataUrl}" data-id="${e.id}" title="${esc(e.title)}">`).join('')}
         </div>
       </div>`).join('') || '';
   }
