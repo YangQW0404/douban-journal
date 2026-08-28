@@ -73,35 +73,62 @@ async function fetchPage(url) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  const { url, start } = req.query;
+  const { url, start, page } = req.query;
   if (!url || !/^https?:\/\/(www\.)?douban\.com\//.test(url)) {
     return res.status(400).json({ error: '请输入 douban.com 的帖子链接' });
   }
   try {
-    // 评论分页：豆瓣小组帖子 ?start=0,100,200...
-    const target = start !== undefined
-      ? url + (url.includes('?') ? '&' : '?') + 'start=' + start
-      : url;
-    const html = await fetchPage(target);
     const data = { url };
-    if (!start) {
-      data.title = extractRe(html, /<h1[^>]*>([\s\S]*?)<\/h1>/) || extractRe(html, /<title>([\s\S]*?)<\/title>/);
-      data.author = extractRe(html, /<a[^>]*class="[^"]*\bfrom[^"]*"[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/) || extractRe(html, /<span[^>]*class="[^"]*\bfrom[^"]*"[^>]*>([\s\S]*?)<\/span>/);
-      data.time = extractRe(html, /<span[^>]*class="[^"]*\bcolor-green[^"]*"[^>]*>([\s\S]*?)<\/span>/) || extractRe(html, /class="create-time[^"]*"[^>]*>([\s\S]*?)</);
-      data.content = extractRe(html, /<div[^>]*class="[^"]*topic-content[^"]*"[^>]*>([\s\S]*?)<\/div>/) || extractRe(html, /<div[^>]*id="link-report[^"]*"[^>]*>([\s\S]*?)<\/div>/);
-      const imgs = [];
-      const imgRe = /<div[^>]*class="[^"]*topic-figure[^"]*"[^>]*>\s*<img[^>]*src="([^"]+)"/g;
-      let im;
-      while ((im = imgRe.exec(html))) imgs.push(im[1]);
-      data.images = imgs;
-      data.topicId = (url.match(/topic\/(\d+)/) || [])[1] || '';
+    const needPost = !start && !page; // 首次请求才解析正文
+    // 分页：固定 100 步长（page 从 0 开始），避免按条数累计导致错位
+    const startVal = start !== undefined ? +start : ((+page || 0) * 100);
+    // 评论优先走豆瓣 JSON 接口（含点赞数和总数），失败回退 HTML
+    let comments = null, totalComments = null;
+    const topicId = (url.match(/topic\/(\d+)/) || [])[1];
+    if (topicId) {
+      try {
+        const jUrl = `https://www.douban.com/j/group/topic/${topicId}/comments?start=${startVal}&count=100&sortby=likes`;
+        const jRes = await fetch(jUrl, { headers: { 'User-Agent': UA, 'Referer': url, 'Accept': 'application/json', 'Cookie': USER_COOKIE || ('bid=' + Math.random().toString(36).slice(2,14)) } });
+        if (jRes.ok) {
+          const j = await jRes.json();
+          if (j && Array.isArray(j.comments)) {
+            comments = j.comments.map(c => ({
+              author: (c.author && c.author.name) || '',
+              time: (c.create_time || '').split(' ')[0] || '',
+              content: (c.text || '').replace(/<[^>]+>/g, '').trim(),
+              avatar: '',
+              likes: (c.votes !== undefined ? c.votes : (c.like_count || 0))
+            }));
+            totalComments = j.total !== undefined ? j.total : null;
+          }
+        }
+      } catch (e) { /* JSON 接口失败，回退 HTML */ }
     }
-    data.comments = parseComments(html);
-    // 总评论数（豆瓣小组帖子显示 "共 xxx 条回复"）
-    if (!start) {
-      const tm = html.match(/共\s*(\d+)\s*条回复/) || html.match(/(\d+)\s*条回复/);
-      data.totalComments = tm ? +tm[1] : (data.comments ? data.comments.length : 0);
+    // 回退：HTML 解析
+    if (comments === null) {
+      const target = url + (url.includes('?') ? '&' : '?') + 'start=' + startVal;
+      const html = await fetchPage(target);
+      if (needPost) {
+        data.title = extractRe(html, /<h1[^>]*>([\s\S]*?)<\/h1>/) || extractRe(html, /<title>([\s\S]*?)<\/title>/);
+        data.author = extractRe(html, /<a[^>]*class="[^"]*\bfrom[^"]*"[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/) || extractRe(html, /<span[^>]*class="[^"]*\bfrom[^"]*"[^>]*>([\s\S]*?)<\/span>/);
+        data.time = extractRe(html, /<span[^>]*class="[^"]*\bcolor-green[^"]*"[^>]*>([\s\S]*?)<\/span>/) || extractRe(html, /class="create-time[^"]*"[^>]*>([\s\S]*?)</);
+        data.content = extractRe(html, /<div[^>]*class="[^"]*topic-content[^"]*"[^>]*>([\s\S]*?)<\/div>/) || extractRe(html, /<div[^>]*id="link-report[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+        const imgs = [];
+        const imgRe = /<div[^>]*class="[^"]*topic-figure[^"]*"[^>]*>\s*<img[^>]*src="([^"]+)"/g;
+        let im;
+        while ((im = imgRe.exec(html))) imgs.push(im[1]);
+        data.images = imgs;
+        data.topicId = topicId || '';
+      }
+      comments = parseComments(html);
+      if (needPost) {
+        const tm = html.match(/共\s*(\d+)\s*条回复/) || html.match(/(\d+)\s*条回复/);
+        totalComments = tm ? +tm[1] : comments.length;
+      }
     }
+    data.comments = comments;
+    if (needPost) data.totalComments = totalComments !== null ? totalComments : comments.length;
+    if (totalComments !== null && !needPost) data.totalComments = totalComments;
     return res.status(200).json(data);
   } catch (e) {
     return res.status(502).json({ error: e.message || '抓取失败' });
