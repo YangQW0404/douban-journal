@@ -5,79 +5,211 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>豆瓣手账 · 帖子评论收藏</title>
 <style>
-  :root{ --paper:#faf6ef; --ink:#4a4038; --accent:#e8837b; --tape:#f9d7a8; }
+  :root{ --paper:#faf6ef; --ink:#4a4038; --accent:#e8837b; }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:#efe9de;font-family:"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);min-height:100vh}
-  .wrap{max-width:860px;margin:0 auto;padding:28px 18px 80px}
-  h1{font-size:26px;text-align:center;letter-spacing:2px;margin-bottom:6px}
-  .sub{text-align:center;font-size:13px;color:#9a8f83;margin-bottom:26px}
-  .card{background:#fff;border-radius:14px;padding:22px;box-shadow:0 2px 12px rgba(90,70,40,.08);margin-bottom:20px}
+  .wrap{max-width:860px;margin:0 auto;padding:20px 14px 80px}
+  h1{font-size:24px;text-align:center;letter-spacing:2px;margin-bottom:6px}
+  .sub{text-align:center;font-size:13px;color:#9a8f83;margin-bottom:20px}
+  .navbar{display:flex;justify-content:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  .navbar button{background:#fff;color:var(--ink);border:2px solid #e5dccd;font-size:14px;padding:8px 18px}
+  .navbar button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .authbar{text-align:center;font-size:13px;color:#8a7f83;margin-bottom:16px}
+  .authbar .email{color:#e8837b}
+  .authbar a{color:#e8837b;cursor:pointer;margin:0 6px}
+  .authcard{max-width:380px;margin:0 auto 18px}
+  .authcard .row{flex-direction:column}
+  .syncNote{font-size:12px;color:#9a8f83;text-align:center;margin-top:8px;min-height:16px}
+  .card{background:#fff;border-radius:14px;padding:20px;box-shadow:0 2px 12px rgba(90,70,40,.08);margin-bottom:18px}
   .row{display:flex;gap:10px}
-  input[type=text]{flex:1;border:2px solid #e5dccd;border-radius:10px;padding:11px 14px;font-size:15px;outline:none;background:#fffdf9}
-  input[type=text]:focus{border-color:var(--accent)}
+  input[type=text],input[type=file-text]{flex:1;border:2px solid #e5dccd;border-radius:10px;padding:11px 14px;font-size:15px;outline:none;background:#fffdf9}
+  input:focus{border-color:var(--accent)}
   button{border:none;border-radius:10px;padding:11px 20px;font-size:15px;cursor:pointer;background:var(--accent);color:#fff;transition:.15s}
   button:disabled{background:#d8cfc2;cursor:not-allowed}
   button.ghost{background:#fff;color:var(--ink);border:2px solid #e5dccd}
+  button.small{padding:7px 14px;font-size:13px}
   .msg{margin-top:12px;font-size:13px;color:#b0655e;min-height:18px}
-  .post-head{margin-bottom:14px}
   .post-title{font-size:19px;font-weight:600;margin-bottom:6px}
-  .post-meta{font-size:12px;color:#a09486;margin-bottom:12px}
-  .post-content{white-space:pre-wrap;font-size:14px;line-height:1.8;background:var(--paper);border-radius:10px;padding:14px 16px;max-height:260px;overflow:auto}
+  .post-meta{font-size:13px;color:#a09486;margin-bottom:4px}
+  .post-link{display:inline-block;font-size:14px;color:#e8837b;margin-bottom:12px}
+  .post-content{white-space:pre-wrap;font-size:14px;line-height:1.8;background:var(--paper);border-radius:10px;padding:14px 16px;max-height:240px;overflow:auto}
   .post-imgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
   .post-imgs img{width:84px;height:84px;object-fit:cover;border-radius:8px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.12)}
-  .toolbar{display:flex;justify-content:space-between;align-items:center;margin:18px 0 10px;font-size:13px;color:#8a7f72}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px;font-size:13px;color:#8a7f72;flex-wrap:wrap;gap:6px}
   .toolbar b{color:var(--accent)}
-  .cmt{display:flex;gap:12px;padding:13px 10px;border-bottom:1px dashed #eee4d4;align-items:flex-start}
+  .toolbar a{color:#e8837b}
+  .cmt{display:flex;gap:10px;padding:12px 8px;border-bottom:1px dashed #eee4d4;align-items:flex-start}
   .cmt input[type=checkbox]{width:18px;height:18px;margin-top:3px;accent-color:var(--accent);flex-shrink:0;cursor:pointer}
-  .cmt .body{flex:1;cursor:pointer}
-  .cmt .who{font-size:12px;color:#b0a494;margin-bottom:3px}
-  .cmt .txt{font-size:14px;line-height:1.7;white-space:pre-wrap}
+  .cmt .body{flex:1;cursor:pointer;min-width:0}
+  .cmt .who{font-size:12px;color:#b0a494;margin-bottom:3px;display:flex;justify-content:space-between;gap:8px}
+  .cmt .likes{color:#e8837b;white-space:nowrap;font-size:12px}
+  .cmt .txt{font-size:14px;line-height:1.7;white-space:pre-wrap;word-break:break-word}
   .cmt.selected{background:#fdf3ee;border-radius:8px}
-  .actions{display:flex;gap:12px;justify-content:center;margin-top:26px;flex-wrap:wrap}
+  .actions{display:flex;gap:12px;justify-content:center;margin-top:22px;flex-wrap:wrap}
   #previewBox{display:none;text-align:center}
-  #canvasOut{max-width:100%;border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.15)}
+  #imgOut{max-width:100%;width:100%;border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.15);display:block}
+  .saveHint{font-size:13px;color:#9a8f83;margin:10px 0}
   .more{width:100%;margin-top:14px;background:#fff;color:var(--ink);border:2px dashed #e0d5c2}
   .empty{padding:8px;font-size:13px;color:#b0a494}
+  .nb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+  .nb-card{border:2px solid #eee4d4;border-radius:12px;overflow:hidden;cursor:pointer;background:#fffdf9}
+  .nb-card:hover{border-color:var(--accent)}
+  .nb-cover{width:100%;height:120px;object-fit:cover;background:var(--paper);display:block}
+  .nb-info{padding:10px 12px}
+  .nb-name{font-size:15px;font-weight:600;margin-bottom:4px}
+  .nb-intro{font-size:12px;color:#9a8f83;line-height:1.5;height:36px;overflow:hidden;margin-bottom:6px}
+  .nb-tags{font-size:11px;color:#e8837b;margin-bottom:4px}
+  .nb-date{font-size:11px;color:#c3b6a5}
+  .nb-entries{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+  .entry-card{border:2px solid #eee4d4;border-radius:10px;overflow:hidden;cursor:pointer;background:#fffdf9}
+  .entry-thumb{width:100%;height:150px;object-fit:cover;display:block;background:var(--paper)}
+  .entry-title{font-size:12px;padding:8px;line-height:1.4;height:48px;overflow:hidden;color:var(--ink)}
+  .modal-mask{display:none;position:fixed;inset:0;background:rgba(60,50,40,.5);z-index:50;align-items:center;justify-content:center;padding:16px}
+  .modal-mask.show{display:flex}
+  .modal{background:#fff;border-radius:14px;padding:22px;max-width:440px;width:100%;max-height:88vh;overflow:auto}
+  .modal h3{margin-bottom:16px;font-size:17px}
+  .modal label{display:block;font-size:13px;color:#8a7f72;margin:12px 0 5px}
+  .modal input[type=text],.modal textarea{width:100%;border:2px solid #e5dccd;border-radius:8px;padding:9px 12px;font-size:14px;font-family:inherit}
+  .modal textarea{height:64px;resize:vertical}
+  .coverPick{display:flex;align-items:center;gap:12px}
+  .coverPick img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:2px solid #e5dccd}
+  .del{color:#c0564e;font-size:12px;cursor:pointer;margin-left:8px}
+  .backlink{font-size:13px;color:#e8837b;cursor:pointer;margin-bottom:12px;display:inline-block}
+  .nb-actions{display:flex;gap:8px;margin-top:10px}
+  .selNotebook{display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap;align-items:center}
+  select{border:2px solid #e5dccd;border-radius:10px;padding:10px 12px;font-size:14px;background:#fffdf9;color:var(--ink)}
+  @media (max-width:600px){
+    .row{flex-direction:column}
+    .wrap{padding:14px 10px 70px}
+    .card{padding:14px}
+    .cmt .txt{font-size:14px}
+    #imgOut{width:100%}
+  }
 </style>
+<!-- Supabase 配置：部署时用 config.js 或 Vercel 环境变量注入 -->
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
 <div class="wrap">
   <h1>📖 豆瓣手账</h1>
   <div class="sub">粘贴豆瓣小组帖子链接 → 勾选想收藏的评论 → 生成手账图片</div>
 
-  <div class="card">
+  <div class="navbar">
+    <button id="tabMake" class="active">✂️ 做手账</button>
+    <button id="tabBooks">📚 手账本</button>
+  </div>
+
+  <!-- 登录状态栏 -->
+  <div class="authbar" id="authBar" style="display:none"></div>
+
+  <!-- 登录卡片 -->
+  <div class="card authcard" id="authCard">
     <div class="row">
-      <input type="text" id="urlInput" placeholder="https://www.douban.com/group/topic/xxxxxxx/">
-      <button id="fetchBtn">抓取帖子</button>
+      <input type="text" id="emailInput" placeholder="邮箱（用于账号登录，如 xxx@qq.com）">
+      <button id="loginBtn">发送验证码</button>
     </div>
-    <div class="msg" id="msg"></div>
+    <div class="row" style="margin-top:10px;display:none" id="codeRow">
+      <input type="text" id="codeInput" placeholder="查收邮件，输入 6 位验证码">
+      <button id="verifyBtn">登录</button>
+    </div>
+    <div class="msg" id="authMsg"></div>
+    <div class="syncNote">登录后手账本云端保存，换设备登录同一邮箱即可同步。<br>不登录也可使用（数据只存在当前浏览器）。</div>
   </div>
 
-  <div class="card" id="postCard" style="display:none">
-    <div class="post-head">
-      <div class="post-title" id="pTitle"></div>
-      <div class="post-meta" id="pMeta"></div>
-      <div class="post-content" id="pContent"></div>
-      <div class="post-imgs" id="pImgs"></div>
+  <!-- ========== 页面1：做手账 ========== -->
+  <div id="pageMake">
+    <div class="card">
+      <div class="row">
+        <input type="text" id="urlInput" placeholder="https://www.douban.com/group/topic/xxxxxxx/">
+        <button id="fetchBtn">抓取帖子</button>
+      </div>
+      <div class="msg" id="msg"></div>
     </div>
-    <div class="toolbar">
-      <span>评论 · 已选 <b id="selCount">0</b> 条</span>
-      <span><a href="javascript:;" id="selAll" style="color:#e8837b">全选</a> · <a href="javascript:;" id="selNone" style="color:#e8837b">取消</a></span>
+
+    <div class="card" id="postCard" style="display:none">
+      <div class="post-head">
+        <div class="post-title" id="pTitle"></div>
+        <div class="post-meta" id="pMeta"></div>
+        <a class="post-link" id="pLink" href="#" target="_blank" rel="noopener">🔗 点击打开原帖</a>
+        <div class="post-content" id="pContent"></div>
+        <div class="post-imgs" id="pImgs"></div>
+      </div>
+      <div class="toolbar">
+        <span>评论 · 已选 <b id="selCount">0</b> 条</span>
+        <span><a href="javascript:;" id="selAll">全选</a> · <a href="javascript:;" id="selNone">取消</a> · 按点赞排序</span>
+      </div>
+      <div id="cmtList"></div>
+      <button class="more" id="moreBtn" style="display:none">加载更多评论 ↓</button>
+      <div class="actions">
+        <button id="makeBtn">✂️ 生成手账图片</button>
+        <button class="ghost" id="reBtn">换一篇</button>
+      </div>
     </div>
-    <div id="cmtList"></div>
-    <button class="more" id="moreBtn" style="display:none">加载更多评论 ↓</button>
-    <div class="actions">
-      <button id="makeBtn">✂️ 生成手账图片</button>
-      <button class="ghost" id="reBtn">换一篇</button>
+
+    <div class="card" id="previewBox">
+      <div class="sub" style="margin:8px 0 14px">📱 手机上长按图片可保存</div>
+      <img id="imgOut" alt="手账图">
+      <div class="saveHint" id="saveHint"></div>
+      <div class="actions">
+        <button id="dlBtn">下载图片</button>
+        <button class="ghost" id="saveToBookBtn">📚 放入手账本</button>
+        <button class="ghost" id="backBtn">返回修改勾选</button>
+      </div>
+      <div class="selNotebook" id="saveBookRow" style="display:none">
+        <select id="bookSelect"></select>
+        <button class="small" id="confirmSaveBook">存入</button>
+      </div>
     </div>
   </div>
 
-  <div class="card" id="previewBox">
-    <div class="sub" style="margin:10px 0 16px">长按或右键保存图片</div>
-    <canvas id="canvasOut"></canvas>
+  <!-- ========== 页面2：手账本 ========== -->
+  <div id="pageBooks" style="display:none">
+    <div id="booksHome">
+      <div class="card">
+        <div class="toolbar"><span style="font-size:15px;font-weight:600">我的手账本</span><button class="small" id="newBookBtn">＋ 新建手账本</button></div>
+        <div class="nb-grid" id="nbGrid"></div>
+        <div class="empty" id="nbEmpty">还没有手账本，点右上角「新建手账本」创建一个吧～</div>
+      </div>
+    </div>
+    <div id="bookDetail" style="display:none">
+      <span class="backlink" id="backBooks">← 返回手账本列表</span>
+      <div class="card">
+        <div class="toolbar">
+          <span style="font-size:16px;font-weight:600" id="bdName"></span>
+          <span><button class="small ghost" id="editBookBtn">编辑</button> <button class="small ghost" id="delBookBtn">删除手账本</button></span>
+        </div>
+        <div class="nb-intro" id="bdIntro" style="height:auto"></div>
+        <div class="nb-tags" id="bdTags" style="margin-bottom:10px"></div>
+        <div class="nb-date" id="bdDate"></div>
+        <hr style="border:none;border-top:1px dashed #eee4d4;margin:12px 0">
+        <div class="nb-entries" id="entryGrid"></div>
+        <div class="empty" id="entryEmpty">这个手账本还没有内容，去做一张手账图存进来吧～</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 新建/编辑手账本弹窗 -->
+<div class="modal-mask" id="bookModal">
+  <div class="modal">
+    <h3 id="bmTitle">新建手账本</h3>
+    <label>手账本名称 *</label>
+    <input type="text" id="bmName" maxlength="30" placeholder="比如：豆瓣金句收藏">
+    <label>介绍</label>
+    <textarea id="bmIntro" maxlength="100" placeholder="这个本子用来收藏什么…"></textarea>
+    <label>标签（用空格分隔）</label>
+    <input type="text" id="bmTags" maxlength="50" placeholder="比如：金句 治愈 小组">
+    <label>封面图片</label>
+    <div class="coverPick">
+      <img id="bmCoverImg" style="display:none">
+      <button class="ghost small" id="bmCoverBtn">选择封面图片</button>
+      <input type="file" id="bmCoverFile" accept="image/*" style="display:none">
+    </div>
+    <div class="nb-date" id="bmDate" style="margin-top:10px"></div>
     <div class="actions">
-      <button id="dlBtn">下载图片</button>
-      <button class="ghost" id="backBtn">返回修改勾选</button>
+      <button id="bmSave">保存</button>
+      <button class="ghost" id="bmCancel">取消</button>
     </div>
   </div>
 </div>
@@ -85,8 +217,125 @@
 <script>
 const $ = id => document.getElementById(id);
 let state = { url:'', comments:[], start:0, hasMore:false };
+let currentBlobUrl = null;
+let currentEntry = null; // {title,url,author,time,comments,imgDataUrl}
 
-// ---------- 抓取 ----------
+// ============ 存储：本地 + 云端（Supabase，登录后启用） ============
+const LS_KEY = 'dj_notebooks_v1';
+const SB_URL = window.SUPABASE_URL || '';
+const SB_KEY = window.SUPABASE_ANON_KEY || '';
+let sb = null; // supabase client
+let currentUser = null;
+if (SB_URL && SB_KEY && window.supabase) {
+  sb = window.supabase.createClient(SB_URL, SB_KEY);
+}
+function loadBooks(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)) || []; }catch(e){ return []; } }
+function saveBooks(books){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(books)); }catch(e){ alert('保存失败：存储空间不足（图片太多）。可删除一些旧手账本腾出空间。'); return false; }
+  cloudSave(books); // 登录态下异步同步云端，失败不打断
+  return true;
+}
+async function cloudSave(books){
+  if (!sb || !currentUser) return;
+  try{
+    await sb.from('notebooks').upsert({ user_id: currentUser.id, data: books, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+    setSyncNote('已同步到云端 ✓');
+  }catch(e){ setSyncNote('云端同步失败，已保存在本地（下次打开会重试）'); }
+}
+async function cloudLoad(){
+  if (!sb || !currentUser) return null;
+  const { data, error } = await sb.from('notebooks').select('data').eq('user_id', currentUser.id).maybeSingle();
+  if (error) throw error;
+  return data ? data.data : null;
+}
+function setSyncNote(t){ const el = document.querySelector('.syncNote'); if (el) el.textContent = t; }
+
+// ============ 登录流程 ============
+function renderAuthBar(){
+  const bar = $('authBar');
+  if (currentUser){
+    bar.style.display = 'block';
+    bar.innerHTML = `👤 <span class="email">${esc(currentUser.email||'')}</span> · 云端已开启 <a id="logoutLink">退出登录</a>`;
+    $('logoutLink').onclick = async () => { await sb.auth.signOut(); location.reload(); };
+    $('authCard').style.display = 'none';
+  } else {
+    bar.style.display = 'none';
+    $('authCard').style.display = 'block';
+  }
+}
+$('loginBtn').onclick = async () => {
+  if (!sb) { $('authMsg').textContent = '云端功能未配置（需要在部署时填入 Supabase 密钥，详见部署指南）'; return; }
+  const email = $('emailInput').value.trim();
+  if (!/^\S+@\S+\.\S+$/.test(email)) { $('authMsg').textContent = '请输入正确的邮箱地址'; return; }
+  const { error } = await sb.auth.signInWithOtp({ email });
+  if (error) { $('authMsg').textContent = '发送失败：' + error.message; return; }
+  $('authMsg').textContent = '验证码已发到邮箱（记得看垃圾箱），有效期 1 小时';
+  $('codeRow').style.display = 'flex';
+  $('loginBtn').disabled = true; $('loginBtn').textContent = '已发送';
+};
+$('verifyBtn').onclick = async () => {
+  const email = $('emailInput').value.trim();
+  const code = $('codeInput').value.trim();
+  if (!code) return;
+  const { error } = await sb.auth.verifyOtp({ email, token: code, type: 'email' });
+  if (error) { $('authMsg').textContent = '验证失败：' + (error.message.includes('Expired') ? '验证码已过期，刷新页面重发' : '验证码不对，请检查'); return; }
+  // 登录成功：合并本地与云端
+  await afterLogin();
+};
+async function afterLogin(){
+  currentUser = (await sb.auth.getUser()).data.user;
+  renderAuthBar();
+  try{
+    const cloud = await cloudLoad();
+    const local = loadBooks();
+    if (cloud === null){
+      // 首次登录：把本地数据上传云端
+      if (local.length) { cloudSave(local); setSyncNote('本地手账本已上传云端 ✓'); }
+    } else {
+      // 云端已有：云端为准（本地有而云端没有的旧数据会被覆盖，已提示）
+      localStorage.setItem(LS_KEY, JSON.stringify(cloud));
+      if (local.length && JSON.stringify(local) !== JSON.stringify(cloud)) {
+        // 简单合并：以云端为主，补上云端缺的本子
+        const cloudIds = new Set(cloud.map(b=>b.id));
+        const extra = local.filter(b=>!cloudIds.has(b.id));
+        const merged = cloud.concat(extra);
+        localStorage.setItem(LS_KEY, JSON.stringify(merged));
+        cloudSave(merged);
+      }
+    }
+  }catch(e){ setSyncNote('云端读取失败，当前使用本地数据'); }
+  renderBooks();
+}
+// 会话恢复
+(async function initAuth(){
+  if (!sb) { renderAuthBar(); return; }
+  try{
+    const { data } = await sb.auth.getSession();
+    if (data && data.session){
+      currentUser = data.session.user;
+      renderAuthBar();
+      const cloud = await cloudLoad();
+      if (cloud) localStorage.setItem(LS_KEY, JSON.stringify(cloud));
+      renderBooks();
+    }
+  }catch(e){}
+  sb.auth.onAuthStateChange(async (evt)=>{
+    if (evt === 'SIGNED_IN'){ currentUser = (await sb.auth.getUser()).data.user; renderAuthBar(); }
+  });
+})();
+
+// ============ Tab 切换 ============
+function switchTab(tab){
+  $('pageMake').style.display = tab==='make' ? 'block':'none';
+  $('pageBooks').style.display = tab==='books' ? 'block':'none';
+  $('tabMake').classList.toggle('active', tab==='make');
+  $('tabBooks').classList.toggle('active', tab==='books');
+  if(tab==='books') renderBooks();
+}
+$('tabMake').onclick = () => switchTab('make');
+$('tabBooks').onclick = () => switchTab('books');
+
+// ============ 抓取 ============
 async function fetchDouban(url, start){
   const q = start !== undefined ? `?url=${encodeURIComponent(url)}&start=${start}` : `?url=${encodeURIComponent(url)}`;
   const r = await fetch('/api/douban' + q);
@@ -103,12 +352,13 @@ $('fetchBtn').onclick = async () => {
     const data = await fetchDouban(url);
     state = { url, comments: data.comments || [], start: (data.comments||[]).length, hasMore:(data.comments||[]).length >= 95 };
     $('pTitle').textContent = data.title || '(无标题)';
-    $('pMeta').textContent = (data.author ? data.author + ' · ' : '') + (data.time || '') + ' · ' + url;
+    $('pMeta').textContent = (data.author ? data.author + ' · ' : '') + (data.time || '');
+    $('pLink').href = url;
     $('pContent').textContent = data.content || '(正文为空或需要登录查看)';
-    $('pImgs').innerHTML = (data.images||[]).map(s=>`<img src="${s}" crossorigin="anonymous" onerror="this.style.display='none'">`).join('');
+    $('pImgs').innerHTML = (data.images||[]).map(s=>`<img src="${s}" onerror="this.style.display='none'">`).join('');
     renderComments();
     $('postCard').style.display = 'block';
-    window.scrollTo({top: $('postCard').offsetTop - 20, behavior:'smooth'});
+    $('postCard').scrollIntoView({behavior:'smooth', block:'start'});
   } catch(e){ $('msg').textContent = e.message; }
   $('fetchBtn').disabled = false; $('fetchBtn').textContent = '抓取帖子';
 };
@@ -125,19 +375,18 @@ $('moreBtn').onclick = async () => {
   $('moreBtn').disabled = false;
 };
 
-// ---------- 评论列表 ----------
+// ============ 评论列表（带点赞数） ============
 function renderComments(){
   const box = $('cmtList');
   box.innerHTML = state.comments.map((c,i)=>`
     <div class="cmt" data-i="${i}">
       <input type="checkbox">
       <div class="body">
-        <div class="who">${esc(c.author||'匿名')} ${c.time||''}</div>
+        <div class="who"><span>${esc(c.author||'匿名')} ${c.time||''}</span><span class="likes">👍 ${c.likes||0}</span></div>
         <div class="txt">${esc(c.content)}</div>
       </div>
     </div>`).join('') || '<div class="empty">这篇帖子没有抓到评论，或帖子需要登录才能看评论。</div>';
   box.querySelectorAll('.cmt').forEach(el=>{
-    const i = +el.dataset.i;
     const toggle = on => { el.querySelector('input').checked = on; el.classList.toggle('selected', on); updateCount(); };
     el.querySelector('input').onchange = e => toggle(e.target.checked);
     el.querySelector('.body').onclick = () => toggle(!el.querySelector('input').checked);
@@ -145,16 +394,20 @@ function renderComments(){
   $('moreBtn').style.display = state.hasMore ? 'block' : 'none';
   updateCount();
 }
-function selectedComments(){ return [...document.querySelectorAll('.cmt')].filter(el=>el.querySelector('input').checked).map(el=>state.comments[+el.dataset.i]); }
+function selectedComments(){
+  const sel = [...document.querySelectorAll('.cmt')].filter(el=>el.querySelector('input').checked).map(el=>state.comments[+el.dataset.i]);
+  return sel.sort((a,b)=>(b.likes||0)-(a.likes||0)); // 按点赞倒序
+}
 function updateCount(){ $('selCount').textContent = document.querySelectorAll('.cmt input:checked').length; }
-$('selAll').onclick = () => document.querySelectorAll('.cmt input').forEach((c,i)=>{ c.checked=true; c.closest('.cmt').classList.add('selected'); updateCount(); });
+$('selAll').onclick = () => document.querySelectorAll('.cmt input').forEach(c=>{ c.checked=true; c.closest('.cmt').classList.add('selected'); updateCount(); });
 $('selNone').onclick = () => document.querySelectorAll('.cmt input').forEach(c=>{ c.checked=false; c.closest('.cmt').classList.remove('selected'); updateCount(); });
 $('reBtn').onclick = () => { $('postCard').style.display='none'; $('previewBox').style.display='none'; window.scrollTo({top:0}); };
 const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-// ---------- 手账图片生成 ----------
-const WASHI = ['rgba(249,215,168,.75)','rgba(232,131,123,.55)','rgba(176,205,166,.6)','rgba(196,181,222,.55)'];
+// ============ 手账图生成（大字号适配手机） ============
+const WASHI = ['rgba(249,215,168,.8)','rgba(232,131,123,.6)','rgba(176,205,166,.65)','rgba(196,181,222,.6)'];
 const NOTE_BG = ['#fdf3ee','#eef4ea','#f3effb','#fdf8e3'];
+const FONT = '"PingFang SC","Microsoft YaHei",sans-serif';
 
 function wrapText(ctx, text, maxW){
   const lines = [];
@@ -169,15 +422,11 @@ function wrapText(ctx, text, maxW){
   }
   return lines;
 }
-
 function roundRect(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
-
 function tape(ctx,x,y,w,color,rot){
   ctx.save(); ctx.translate(x,y); ctx.rotate(rot);
-  ctx.fillStyle = color;
-  ctx.fillRect(-w/2,-14,w,28);
-  ctx.fillStyle = 'rgba(255,255,255,.25)';
-  ctx.fillRect(-w/2,-14,w,8);
+  ctx.fillStyle = color; ctx.fillRect(-w/2,-16,w,32);
+  ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.fillRect(-w/2,-16,w,9);
   ctx.restore();
 }
 
@@ -185,99 +434,267 @@ $('makeBtn').onclick = async () => {
   const cmts = selectedComments();
   if (!cmts.length) { alert('先勾选至少一条评论～'); return; }
   $('makeBtn').disabled = true; $('makeBtn').textContent = '生成中…';
-  try { await drawJournal(cmts); $('previewBox').style.display='block'; window.scrollTo({top:$('previewBox').offsetTop-20,behavior:'smooth'}); }
-  catch(e){ alert('生成失败：'+e.message); }
+  try {
+    await drawJournal(cmts);
+    $('previewBox').style.display = 'block';
+    $('saveBookRow').style.display = 'none';
+    currentEntry = {
+      title: $('pTitle').textContent, url: state.url,
+      author: $('pMeta').textContent, comments: cmts,
+      imgDataUrl: $('imgOut').src
+    };
+    $('previewBox').scrollIntoView({behavior:'smooth', block:'start'});
+  } catch(e){ alert('生成失败：' + e.message); }
   $('makeBtn').disabled = false; $('makeBtn').textContent = '✂️ 生成手账图片';
 };
 
 function drawJournal(cmts){
-  return new Promise(resolve => {
-    const W = 1000, M = 64;
-    const cv = $('canvasOut'), ctx = cv.getContext('2d');
-    // 预排版，算高度
-    ctx.font = '15px "PingFang SC","Microsoft YaHei",sans-serif';
-    const maxW = W - M*2 - 60;
-    const titleLines = wrapText(ctx, $('pTitle').textContent, maxW);
-    const contentLines = wrapText(ctx, ($('pContent').textContent||'').slice(0,600), maxW);
-    const cmtLines = cmts.map(c => ({ who:c.author||'匿名', lines: wrapText(ctx, c.content, maxW-24) }));
-    const titleH = 70 + titleLines.length*30;
-    const contentH = 40 + contentLines.length*26;
-    const cmtH = cmtLines.reduce((s,c)=> s + 66 + c.lines.length*24, 0);
-    const H = Math.max(900, M*2 + titleH + contentH + cmtH + 130);
+  return new Promise((resolve, reject) => {
+    try {
+      const W = 1000, M = 56;
+      const cv = document.createElement('canvas');
+      const ctx = cv.getContext('2d');
+      const maxW = W - M*2 - 64;
+      // 大字号：手机上不放大也看得清
+      ctx.font = `30px ${FONT}`;
+      const titleLines = wrapText(ctx, $('pTitle').textContent, maxW);
+      ctx.font = `26px ${FONT}`;
+      const contentLines = wrapText(ctx, ($('pContent').textContent||'').slice(0,500), maxW);
+      const cmtLines = cmts.map(c => { ctx.font = `28px ${FONT}`; return { who:c.author||'匿名', likes:c.likes||0, lines: wrapText(ctx, c.content, maxW-40) }; });
+      const titleH = 90 + titleLines.length*44;
+      const contentH = contentLines.length ? 50 + contentLines.length*42 : 0;
+      const cmtH = cmtLines.reduce((s,c)=> s + 100 + c.lines.length*42, 0);
+      const H = Math.max(1000, M*2 + titleH + contentH + cmtH + 150);
 
-    cv.width = W; cv.height = H; cv.style.width = 'min(100%, 620px)';
-    // 纸张底
-    ctx.fillStyle = '#faf6ef'; ctx.fillRect(0,0,W,H);
-    // 点阵网格
-    ctx.fillStyle = 'rgba(170,150,120,.22)';
-    for (let x=40;x<W;x+=34) for (let y=40;y<H;y+=34) { ctx.beginPath(); ctx.arc(x,y,1.4,0,7); ctx.fill(); }
-    // 胶带装饰（四角）
-    tape(ctx, M+90, 34, 120, WASHI[0], -.12);
-    tape(ctx, W-M-90, 34, 120, WASHI[1], .1);
-    // 日期戳
-    const d = new Date();
-    ctx.fillStyle = '#b9ab99'; ctx.font = '13px sans-serif'; ctx.textAlign='right';
-    ctx.fillText(`📖 收藏于 ${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`, W-M, 62);
-    ctx.textAlign='left';
+      cv.width = W; cv.height = H;
+      // 纸底 + 点阵
+      ctx.fillStyle = '#faf6ef'; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = 'rgba(170,150,120,.22)';
+      for (let x=40;x<W;x+=36) for (let y=40;y<H;y+=36) { ctx.beginPath(); ctx.arc(x,y,1.6,0,7); ctx.fill(); }
+      tape(ctx, M+110, 38, 130, WASHI[0], -.12);
+      tape(ctx, W-M-110, 38, 130, WASHI[1], .1);
+      const d = new Date();
+      ctx.fillStyle = '#b9ab99'; ctx.font = `24px sans-serif`; ctx.textAlign='right';
+      ctx.fillText(`收藏于 ${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`, W-M, 72);
+      ctx.textAlign='left';
 
-    let y = M + 46;
-    // 标题区
-    ctx.fillStyle = '#4a4038'; ctx.font = 'bold 27px "PingFang SC","Microsoft YaHei",sans-serif';
-    titleLines.forEach(l => { ctx.fillText(l, M, y); y += 34; });
-    y += 6;
-    ctx.strokeStyle = '#e8837b'; ctx.lineWidth = 3; ctx.setLineDash([10,7]);
-    ctx.beginPath(); ctx.moveTo(M,y); ctx.lineTo(M+180,y); ctx.stroke(); ctx.setLineDash([]);
-    y += 24;
-    ctx.fillStyle = '#a09486'; ctx.font = '13px sans-serif';
-    ctx.fillText($('pMeta').textContent.split('·')[0].trim().slice(0,30), M, y);
-    y += 26;
+      let y = M + 60;
+      // 标题
+      ctx.fillStyle = '#4a4038'; ctx.font = `bold 42px ${FONT}`;
+      titleLines.forEach(l => { ctx.fillText(l, M, y); y += 50; });
+      y += 8;
+      ctx.strokeStyle = '#e8837b'; ctx.lineWidth = 4; ctx.setLineDash([12,8]);
+      ctx.beginPath(); ctx.moveTo(M,y); ctx.lineTo(M+220,y); ctx.stroke(); ctx.setLineDash([]);
+      y += 34;
+      ctx.fillStyle = '#a09486'; ctx.font = `24px sans-serif`;
+      ctx.fillText($('pMeta').textContent.split('·')[0].trim().slice(0,30), M, y);
+      y += 32;
+      // 原帖入口提示（不展示长链接）
+      ctx.fillStyle = '#e8837b'; ctx.font = `24px ${FONT}`;
+      ctx.fillText('🔗 原帖：见页面「点击打开原帖」按钮', M, y);
+      y += 40;
 
-    // 正文（若太长截断）
-    if (contentLines.length){
-      ctx.fillStyle = '#6b5f53'; ctx.font = '15px "PingFang SC","Microsoft YaHei",sans-serif';
-      contentLines.slice(0,18).forEach(l => { ctx.fillText(l, M, y); y += 26; });
-      if (contentLines.length > 18) { ctx.fillStyle='#b0a494'; ctx.font='13px sans-serif'; ctx.fillText('……（正文太长已截断，完整内容见原帖）', M, y); y += 24; }
-      y += 18;
-    }
+      // 正文摘要
+      if (contentLines.length){
+        ctx.fillStyle = '#6b5f53'; ctx.font = `26px ${FONT}`;
+        contentLines.slice(0,12).forEach(l => { ctx.fillText(l, M, y); y += 40; });
+        if (contentLines.length > 12) { ctx.fillStyle='#b0a494'; ctx.font='22px sans-serif'; ctx.fillText('……（正文太长已截断）', M, y); y += 34; }
+        y += 20;
+      }
 
-    // 评论便签
-    cmtLines.forEach((c,idx) => {
-      const h = 46 + c.lines.length*24;
-      ctx.save();
-      // 阴影
-      ctx.shadowColor = 'rgba(90,70,40,.18)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 4;
-      ctx.fillStyle = NOTE_BG[idx % 4];
-      ctx.translate(M + (idx%2? 12 : 0), 0);
-      roundRect(ctx, M*0 + 0, y, W - M*2 - 20, h, 10); ctx.fill();
-      ctx.restore();
-      // 便签上的小胶带
-      tape(ctx, W/2 + (idx%2? -30:30), y+4, 70, WASHI[idx % 4], (idx%2? -1:1)*.15);
-      // 楼层号
-      ctx.fillStyle = '#e8837b'; ctx.font = 'bold 13px sans-serif';
-      ctx.fillText('#' + (idx+1), M + 22, y + 28);
-      ctx.fillStyle = '#9a8f83'; ctx.font = '13px sans-serif';
-      ctx.fillText(c.who.slice(0,20), M + 52, y + 28);
-      ctx.fillStyle = '#4a4038'; ctx.font = '15px "PingFang SC","Microsoft YaHei",sans-serif';
-      let ly = y + 52;
-      c.lines.forEach(l => { ctx.fillText(l, M + 22, ly); ly += 24; });
-      y += h + 22;
-    });
+      // 评论便签（点赞倒序）
+      cmtLines.forEach((c,idx) => {
+        const h = 66 + c.lines.length*42;
+        ctx.save();
+        ctx.shadowColor = 'rgba(90,70,40,.18)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 5;
+        ctx.fillStyle = NOTE_BG[idx % 4];
+        roundRect(ctx, M + (idx%2? 14 : 0), y, W - M*2 - 24, h, 12); ctx.fill();
+        ctx.restore();
+        tape(ctx, W/2 + (idx%2? -34:34), y+5, 76, WASHI[idx % 4], (idx%2? -1:1)*.15);
+        ctx.fillStyle = '#e8837b'; ctx.font = 'bold 24px sans-serif';
+        ctx.fillText('#' + (idx+1), M + 26, y + 42);
+        ctx.fillStyle = '#9a8f83'; ctx.font = '23px sans-serif';
+        ctx.fillText((c.who.slice(0,16) || '匿名'), M + 76, y + 42);
+        ctx.fillStyle = '#e8a19b'; ctx.font = '23px sans-serif'; ctx.textAlign='right';
+        ctx.fillText('👍 ' + c.likes, W - M - 40, y + 42);
+        ctx.textAlign='left';
+        ctx.fillStyle = '#4a4038'; ctx.font = `28px ${FONT}`;
+        let ly = y + 82;
+        c.lines.forEach(l => { ctx.fillText(l, M + 26, ly); ly += 42; });
+        y += h + 26;
+      });
 
-    // 页脚
-    ctx.fillStyle = '#c3b6a5'; ctx.font = '12px sans-serif'; ctx.textAlign='center';
-    ctx.fillText('— 豆瓣手账 · ' + cmts.length + ' 条珍藏评论 —', W/2, H - 40);
-    ctx.textAlign='left';
-    resolve();
+      ctx.fillStyle = '#c3b6a5'; ctx.font = '22px sans-serif'; ctx.textAlign='center';
+      ctx.fillText('— 豆瓣手账 · ' + cmts.length + ' 条珍藏评论 —', W/2, H - 46);
+      ctx.textAlign='left';
+
+      // 输出：优先 blob（手机兼容好），失败回退 dataURL
+      const img = $('imgOut');
+      const applyUrl = url => { img.onload = ()=>resolve(); img.onerror = ()=>reject(new Error('图片渲染失败')); img.src = url; $('saveHint').textContent = ''; };
+      if (cv.toBlob) {
+        cv.toBlob(blob => {
+          if (!blob) { applyUrl(cv.toDataURL('image/png')); return; }
+          if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+          currentBlobUrl = URL.createObjectURL(blob);
+          img.onload = ()=>resolve(); img.onerror = ()=>reject(new Error('图片渲染失败'));
+          img.src = currentBlobUrl;
+          // 存入手账本用 dataURL
+          const small = document.createElement('canvas');
+          const scale = Math.min(1, 800 / W);
+          small.width = W*scale; small.height = H*scale;
+          small.getContext('2d').drawImage(cv, 0, 0, small.width, small.height);
+          currentEntry = currentEntry || {};
+          img.dataset.full = cv.toDataURL('image/jpeg', 0.85);
+          currentEntry.imgDataUrl = small.toDataURL('image/jpeg', 0.8);
+        }, 'image/png');
+      } else {
+        applyUrl(cv.toDataURL('image/png'));
+      }
+    } catch(e){ reject(e); }
   });
 }
 
 $('dlBtn').onclick = () => {
-  const a = document.createElement('a');
-  a.download = '豆瓣手账_' + Date.now() + '.png';
-  a.href = $('canvasOut').toDataURL('image/png');
-  a.click();
+  try {
+    const a = document.createElement('a');
+    a.download = '豆瓣手账_' + Date.now() + '.png';
+    a.href = currentBlobUrl || $('imgOut').src;
+    document.body.appendChild(a); a.click(); a.remove();
+    $('saveHint').textContent = '若没弹出下载，长按上方图片选择「保存图片」';
+  } catch(e){
+    window.open($('imgOut').src, '_blank');
+  }
 };
 $('backBtn').onclick = () => { $('previewBox').style.display='none'; };
+
+// ============ 存入手账本 ============
+$('saveToBookBtn').onclick = () => {
+  const books = loadBooks();
+  if (!books.length) { alert('还没有手账本，先去「手账本」页创建一个～'); return; }
+  const sel = $('bookSelect');
+  sel.innerHTML = books.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');
+  $('saveBookRow').style.display = 'flex';
+};
+$('confirmSaveBook').onclick = () => {
+  if (!currentEntry) return;
+  const books = loadBooks();
+  const b = books.find(x=>x.id === $('bookSelect').value);
+  if (!b) return;
+  b.entries.unshift({ id: Date.now()+''+Math.floor(Math.random()*999),
+    date: new Date().toLocaleDateString('zh-CN'),
+    title: currentEntry.title, url: currentEntry.url,
+    imgDataUrl: currentEntry.imgDataUrl || $('imgOut').src,
+    comments: currentEntry.comments });
+  if (saveBooks(books)) {
+    alert('已存入手账本「' + b.name + '」✅');
+    $('saveBookRow').style.display = 'none';
+  }
+};
+
+// ============ 手账本管理 ============
+let editingBookId = null;
+function renderBooks(){
+  const books = loadBooks();
+  $('nbEmpty').style.display = books.length ? 'none' : 'block';
+  $('nbGrid').innerHTML = books.map(b=>`
+    <div class="nb-card" data-id="${b.id}">
+      ${b.cover ? `<img class="nb-cover" src="${b.cover}">` : `<div class="nb-cover" style="display:flex;align-items:center;justify-content:center;font-size:34px">📒</div>`}
+      <div class="nb-info">
+        <div class="nb-name">${esc(b.name)}</div>
+        <div class="nb-intro">${esc(b.intro||'')}</div>
+        <div class="nb-tags">${esc((b.tags||[]).map(t=>'#'+t).join(' '))}</div>
+        <div class="nb-date">建于 ${b.createdAt} · ${b.entries.length} 篇</div>
+      </div>
+    </div>`).join('');
+  $('nbGrid').querySelectorAll('.nb-card').forEach(el=> el.onclick = ()=>openBook(el.dataset.id));
+}
+function openBook(id){
+  const b = loadBooks().find(x=>x.id===id); if(!b) return;
+  $('booksHome').style.display='none'; $('bookDetail').style.display='block';
+  $('bdName').textContent = b.name;
+  $('bdIntro').textContent = b.intro||'';
+  $('bdTags').textContent = (b.tags||[]).map(t=>'#'+t).join(' ');
+  $('bdDate').textContent = '建于 ' + b.createdAt;
+  $('entryEmpty').style.display = b.entries.length ? 'none':'block';
+  $('entryGrid').innerHTML = b.entries.map(e=>`
+    <div class="entry-card" data-id="${e.id}">
+      <img class="entry-thumb" src="${e.imgDataUrl}">
+      <div class="entry-title">${esc(e.title)}<br><span style="color:#c3b6a5;font-size:11px">${e.date} · ${e.comments.length}条评论</span></div>
+      <span class="del" data-eid="${e.id}">删除</span>
+    </div>`).join('');
+  $('entryGrid').querySelectorAll('.entry-card').forEach(el=>{
+    el.onclick = ev => {
+      if (ev.target.classList.contains('del')) {
+        if (!confirm('删除这篇手账？')) return;
+        const books = loadBooks(); const b2 = books.find(x=>x.id===id);
+        b2.entries = b2.entries.filter(e=>e.id !== el.dataset.id);
+        saveBooks(books); openBook(id); return;
+      }
+      const e = b.entries.find(x=>x.id===el.dataset.id);
+      if (e) window.open(e.imgDataUrl, '_blank');
+    };
+  });
+  $('editBookBtn').onclick = ()=>openBookModal(id);
+  $('delBookBtn').onclick = ()=>{
+    if (!confirm('删除整个手账本「'+b.name+'」及其全部内容？此操作不可恢复。')) return;
+    saveBooks(loadBooks().filter(x=>x.id!==id));
+    $('booksHome').style.display='block'; $('bookDetail').style.display='none';
+    renderBooks();
+  };
+}
+$('backBooks').onclick = ()=>{ $('booksHome').style.display='block'; $('bookDetail').style.display='none'; };
+
+function openBookModal(id){
+  editingBookId = id || null;
+  const b = id ? loadBooks().find(x=>x.id===id) : null;
+  $('bmTitle').textContent = b ? '编辑手账本' : '新建手账本';
+  $('bmName').value = b ? b.name : '';
+  $('bmIntro').value = b ? (b.intro||'') : '';
+  $('bmTags').value = b ? (b.tags||[]).join(' ') : '';
+  $('bmDate').textContent = b ? '建于 ' + b.createdAt : '';
+  coverDataUrl = b ? b.cover : null;
+  $('bmCoverImg').style.display = coverDataUrl ? 'block':'none';
+  if (coverDataUrl) $('bmCoverImg').src = coverDataUrl;
+  $('bookModal').classList.add('show');
+}
+let coverDataUrl = null;
+$('newBookBtn').onclick = ()=>openBookModal(null);
+$('bmCancel').onclick = ()=>$('bookModal').classList.remove('show');
+$('bmCoverBtn').onclick = ()=>$('bmCoverFile').click();
+$('bmCoverFile').onchange = e => {
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    // 压缩到 400px 宽，省存储
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      const s = Math.min(1, 400/img.width);
+      c.width = img.width*s; c.height = img.height*s;
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      coverDataUrl = c.toDataURL('image/jpeg',0.8);
+      $('bmCoverImg').src = coverDataUrl; $('bmCoverImg').style.display='block';
+    };
+    img.src = r.result;
+  };
+  r.readAsDataURL(f);
+};
+$('bmSave').onclick = () => {
+  const name = $('bmName').value.trim();
+  if (!name) { alert('给手账本起个名字～'); return; }
+  const books = loadBooks();
+  if (editingBookId) {
+    const b = books.find(x=>x.id===editingBookId);
+    Object.assign(b, { name, intro:$('bmIntro').value.trim(), tags:$('bmTags').value.trim().split(/\s+/).filter(Boolean), cover: coverDataUrl });
+  } else {
+    books.unshift({ id: Date.now()+''+Math.floor(Math.random()*999), name, intro:$('bmIntro').value.trim(),
+      tags:$('bmTags').value.trim().split(/\s+/).filter(Boolean), cover: coverDataUrl,
+      createdAt: new Date().toLocaleDateString('zh-CN'), entries: [] });
+  }
+  saveBooks(books);
+  $('bookModal').classList.remove('show');
+  renderBooks();
+};
 </script>
 </body>
 </html>
