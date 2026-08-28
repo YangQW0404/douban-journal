@@ -29,20 +29,20 @@ function parseComments(html) {
   let m;
   while ((m = liRe.exec(html))) {
     const block = m[1];
-    const author = extractRe(block, /<a[^>]*class="[^"]*\bcite[^"]*"[^>]*>([\s\S]*?)<\/a>/) || extractRe(block, /<div[^>]*class="[^"]*\bfrom[^"]*"[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/);
+    const author = extractRe(block, /<a[^>]*class="[^"]*\bcite[^"]*"[^>]*>([\s\S]*?)<\/a>/) || extractRe(block, /<h4[^>]*>\s*<a[^>]*>([\s\S]*?)<\/a>/) || extractRe(block, /<div[^>]*class="[^"]*\bfrom[^"]*"[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/);
     const avatar = (block.match(/<img[^>]*src="([^"]+)"/) || [])[1] || '';
     const time = extractRe(block, /<span[^>]*class="[^"]*\bpubtime[^"]*"[^>]*>([\s\S]*?)<\/span>/);
     const content = extractRe(block, /<div[^>]*class="[^"]*\breply-content[^"]*"[^>]*>([\s\S]*?)<\/div>/);
     let likes = 0;
-    // 多种结构匹配：data-votecount / vote count span / likes class
+    // 真实页面结构（2026-08 实测豆瓣小组页面）：赞 (86) / data-votecount 等多种兼容
     const vm =
+      block.match(/class="[^"]*\bvote[^"]*"[^>]*>\s*赞\s*\((\d+)\)/) ||
+      block.match(/赞\s*\((\d+)\)/) ||
       block.match(/data-votecount="(\d+)"/) ||
       block.match(/class="[^"]*\bvotecount[^"]*"[^>]*>\s*(\d+)\s*</) ||
       block.match(/class="[^"]*\bcomment-vote[^"]*"[^>]*>[\s\S]*?<span[^>]*>\s*(\d+)\s*</) ||
       block.match(/<span[^>]*class="[^"]*\bvote-count[^"]*"[^>]*>\s*(\d+)\s*</) ||
-      block.match(/<span[^>]*class="[^"]*\blikes-count[^"]*"[^>]*>\s*(\d+)\s*</) ||
-      block.match(/<span[^>]*class="[^"]*\bpraise[^"]*"[^>]*>[\s\S]*?(\d+)[\s\S]*?</) ||
-      block.match(/<div[^>]*class="[^"]*\bcomment-votes?[^"]*"[^>]*>[\s\S]*?(\d+)[\s\S]*?</);
+      block.match(/<span[^>]*class="[^"]*\blikes-count[^"]*"[^>]*>\s*(\d+)\s*</);
     if (vm) likes = +vm[1];
     if (content) comments.push({ author, time, content, avatar, likes });
   }
@@ -122,7 +122,8 @@ export default async function handler(req, res) {
       }
       comments = parseComments(html);
       if (needPost) {
-        const tm = html.match(/共\s*(\d+)\s*条回复/) || html.match(/(\d+)\s*条回复/);
+        // 总评论数：真实页面为 JSON-LD 结构里的 "commentCount": "132"
+        const tm = html.match(/"commentCount"\s*:\s*"?(\d+)/) || html.match(/共\s*(\d+)\s*条回复/) || html.match(/(\d+)\s*条回复/);
         totalComments = tm ? +tm[1] : comments.length;
       }
     }
