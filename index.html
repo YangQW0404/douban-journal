@@ -54,7 +54,7 @@
   .nb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
   .nb-card{border:2px solid #eee4d4;border-radius:12px;overflow:hidden;cursor:pointer;background:#fffdf9}
   .nb-card:hover{border-color:var(--accent)}
-  .nb-cover{width:100%;height:120px;object-fit:cover;background:var(--paper);display:block}
+  .nb-cover{width:100%;height:140px;object-fit:contain;background:var(--paper);display:block;border-bottom:1px solid #f0e8da}
   .nb-info{padding:10px 12px}
   .nb-name{font-size:15px;font-weight:600;margin-bottom:4px}
   .nb-intro{font-size:12px;color:#9a8f83;line-height:1.5;height:36px;overflow:hidden;margin-bottom:6px}
@@ -75,6 +75,19 @@
   .coverPick img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:2px solid #e5dccd}
   .del{color:#c0564e;font-size:12px;cursor:pointer;margin-left:8px}
   .backlink{font-size:13px;color:#e8837b;cursor:pointer;margin-bottom:12px;display:inline-block}
+  /* 手账查看灯箱：左右滑动 */
+  .lightbox{display:none;position:fixed;inset:0;background:rgba(40,32,24,.92);z-index:100;flex-direction:column}
+  .lightbox.show{display:flex}
+  .lb-top{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;color:#f0e8da;font-size:14px}
+  .lb-counter{background:rgba(255,255,255,.15);padding:4px 14px;border-radius:14px}
+  .lb-close{cursor:pointer;font-size:22px;color:#f0e8da;padding:4px 10px}
+  .lb-stage{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;touch-action:pan-y}
+  .lb-track{display:flex;transition:transform .28s ease;height:100%;align-items:center}
+  .lb-item{flex:0 0 100%;display:flex;align-items:center;justify-content:center;padding:10px}
+  .lb-item img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px;user-select:none;-webkit-user-drag:none}
+  .lb-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.2);color:#fff;border:none;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .lb-prev{left:10px} .lb-next{right:10px}
+  .lb-title{color:#c3b6a5;font-size:13px;text-align:center;padding:10px 20px 16px}
   .nb-actions{display:flex;gap:8px;margin-top:10px}
   .selNotebook{display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap;align-items:center}
   select{border:2px solid #e5dccd;border-radius:10px;padding:10px 12px;font-size:14px;background:#fffdf9;color:var(--ink)}
@@ -106,15 +119,18 @@
   <!-- 登录卡片 -->
   <div class="card authcard" id="authCard">
     <div class="row">
-      <input type="text" id="emailInput" placeholder="邮箱（用于账号登录，如 xxx@qq.com）">
-      <button id="loginBtn">发送验证码</button>
+      <input type="text" id="emailInput" placeholder="邮箱（如 xxx@qq.com）">
     </div>
-    <div class="row" style="margin-top:10px;display:none" id="codeRow">
-      <input type="text" id="codeInput" placeholder="查收邮件，输入 6 位验证码">
-      <button id="verifyBtn">登录</button>
+    <div class="row" style="margin-top:10px">
+      <input type="password" id="pwdInput" placeholder="密码（至少 6 位）">
+      <button id="loginBtn">登录 / 注册</button>
     </div>
     <div class="msg" id="authMsg"></div>
-    <div class="syncNote">登录后手账本云端保存，换设备登录同一邮箱即可同步。<br>不登录也可使用（数据只存在当前浏览器）。</div>
+    <div class="syncNote">首次输入新邮箱+密码 = 自动注册；同一邮箱换设备登录即可同步。<br>不登录也可使用（数据只存在当前浏览器）。<a id="otpSwitch" style="color:#e8837b;cursor:pointer">改用验证码登录</a></div>
+    <div class="row" style="margin-top:10px;display:none" id="otpRow">
+      <input type="text" id="codeInput" placeholder="查收邮件，输入 6 位验证码">
+      <button id="otpSendBtn">发送验证码</button>
+    </div>
   </div>
 
   <!-- ========== 页面1：做手账 ========== -->
@@ -137,10 +153,11 @@
       </div>
       <div class="toolbar">
         <span>评论 · 已选 <b id="selCount">0</b> 条</span>
-        <span><a href="javascript:;" id="selAll">全选</a> · <a href="javascript:;" id="selNone">取消</a> · 按点赞排序</span>
+        <span><span id="pageInfo" style="color:#8a7f72;margin-right:10px"></span><a href="javascript:;" id="selAll">全选</a> · <a href="javascript:;" id="selNone">取消</a> · 按点赞排序</span>
       </div>
       <div id="cmtList"></div>
-      <button class="more" id="moreBtn" style="display:none">加载更多评论 ↓</button>
+      <div style="text-align:center;font-size:12px;color:#b0a494;padding:10px 0" id="pageFooter"></div>
+      <button class="more" id="moreBtn" style="display:none">下拉自动加载更多评论 ↓</button>
       <div class="actions">
         <button id="makeBtn">✂️ 生成手账图片</button>
         <button class="ghost" id="reBtn">换一篇</button>
@@ -214,6 +231,20 @@
   </div>
 </div>
 
+<!-- 手账查看灯箱（左右滑动） -->
+<div class="lightbox" id="lightbox">
+  <div class="lb-top">
+    <span class="lb-counter" id="lbCounter">1 / 1</span>
+    <span class="lb-close" id="lbClose">✕</span>
+  </div>
+  <div class="lb-stage" id="lbStage">
+    <button class="lb-nav lb-prev" id="lbPrev">‹</button>
+    <div class="lb-track" id="lbTrack"></div>
+    <button class="lb-nav lb-next" id="lbNext">›</button>
+  </div>
+  <div class="lb-title" id="lbTitle"></div>
+</div>
+
 <script>
 const $ = id => document.getElementById(id);
 let state = { url:'', comments:[], start:0, hasMore:false };
@@ -263,23 +294,44 @@ function renderAuthBar(){
     $('authCard').style.display = 'block';
   }
 }
+// 主登录方式：邮箱 + 密码（新邮箱自动注册）
 $('loginBtn').onclick = async () => {
   if (!sb) { $('authMsg').textContent = '云端功能未配置（需要在部署时填入 Supabase 密钥，详见部署指南）'; return; }
   const email = $('emailInput').value.trim();
+  const pwd = $('pwdInput').value;
   if (!/^\S+@\S+\.\S+$/.test(email)) { $('authMsg').textContent = '请输入正确的邮箱地址'; return; }
-  const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
-  if (error) { $('authMsg').textContent = '发送失败：' + error.message; return; }
-  $('authMsg').innerHTML = '✅ 验证码已发到邮箱（记得看垃圾箱），有效期 1 小时<br>⚠️ 请直接在网页输入 6 位数字验证码，<b>不要点邮件里的链接</b>（国内网络可能打不开）';
-  $('codeRow').style.display = 'flex';
-  $('loginBtn').disabled = true; $('loginBtn').textContent = '已发送';
+  if (pwd.length < 6) { $('authMsg').textContent = '密码至少 6 位'; return; }
+  $('loginBtn').disabled = true; $('loginBtn').textContent = '登录中…';
+  // 先尝试登录，失败且是"用户不存在"则注册
+  let { data, error } = await sb.auth.signInWithPassword({ email, password: pwd });
+  if (error && (error.message.includes('Invalid login') || error.message.includes('not found') || error.message.includes('Email not confirmed') || error.code === 'invalid_credentials' || error.code === 'user_not_found' || error.code === 'email_not_confirmed')){
+    const reg = await sb.auth.signUp({ email, password: pwd });
+    if (reg.error) { $('authMsg').textContent = '注册失败：' + reg.error.message; $('loginBtn').disabled = false; $('loginBtn').textContent = '登录 / 注册'; return; }
+    if (reg.data.session){ data = reg.data; error = null; }
+    else { $('authMsg').innerHTML = '✅ 注册成功！请查收邮箱（垃圾箱也看看）<br>新账号需先确认邮箱：如果收到验证码邮件，输到下方验证码框；<br>如果邮件里有链接打不开（国内网络），用下方「发送验证码」再收一次码即可'; $('otpRow').style.display = 'flex'; $('loginBtn').disabled = false; $('loginBtn').textContent = '登录 / 注册'; return; }
+  }
+  if (error) { $('authMsg').textContent = '登录失败：' + (error.message === 'Email not confirmed' ? '邮箱未确认，请用下方验证码方式确认' : error.message); $('loginBtn').disabled = false; $('loginBtn').textContent = '登录 / 注册'; return; }
+  if (data && data.session){ await afterLogin(); }
+  $('loginBtn').disabled = false; $('loginBtn').textContent = '登录 / 注册';
 };
-$('verifyBtn').onclick = async () => {
+// 备用方式：邮箱验证码
+$('otpSwitch').onclick = () => { $('otpRow').style.display = 'flex'; $('authMsg').textContent = ''; };
+$('otpSendBtn').onclick = async () => {
+  const email = $('emailInput').value.trim();
+  if (!/^\S+@\S+\.\S+$/.test(email)) { $('authMsg').textContent = '请先填邮箱'; return; }
+  $('otpSendBtn').disabled = true;
+  const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+  $('otpSendBtn').disabled = false;
+  if (error) { $('authMsg').textContent = '发送失败：' + (error.message.includes('rate limit') ? '发送太频繁，请 1 小时后再试' : error.message); return; }
+  $('authMsg').innerHTML = '✅ 验证码已发到邮箱（记得看垃圾箱）<br>⚠️ 直接在网页输入 6 位数字验证码，<b>不要点邮件里的链接</b>（国内网络可能打不开）';
+};
+$('codeInput').onkeydown = async e => {
+  if (e.key !== 'Enter') return;
   const email = $('emailInput').value.trim();
   const code = $('codeInput').value.trim();
   if (!code) return;
   const { error } = await sb.auth.verifyOtp({ email, token: code, type: 'email' });
-  if (error) { $('authMsg').textContent = '验证失败：' + (error.message.includes('Expired') ? '验证码已过期，刷新页面重发' : '验证码不对，请检查'); return; }
-  // 登录成功：合并本地与云端
+  if (error) { $('authMsg').textContent = '验证失败：' + (error.message.includes('Expired') ? '验证码已过期，重新发送一次' : '验证码不对，请检查'); return; }
   await afterLogin();
 };
 async function afterLogin(){
@@ -350,7 +402,7 @@ $('fetchBtn').onclick = async () => {
   $('fetchBtn').disabled = true; $('fetchBtn').textContent = '抓取中…'; $('msg').textContent = '';
   try {
     const data = await fetchDouban(url);
-    state = { url, comments: data.comments || [], start: (data.comments||[]).length, hasMore:(data.comments||[]).length >= 95 };
+    state = { url, comments: data.comments || [], start: (data.comments||[]).length, hasMore:(data.comments||[]).length >= 95, totalComments: data.totalComments || 0 };
     $('pTitle').textContent = data.title || '(无标题)';
     $('pMeta').textContent = (data.author ? data.author + ' · ' : '') + (data.time || '');
     $('pLink').href = url;
@@ -363,34 +415,72 @@ $('fetchBtn').onclick = async () => {
   $('fetchBtn').disabled = false; $('fetchBtn').textContent = '抓取帖子';
 };
 
-$('moreBtn').onclick = async () => {
-  $('moreBtn').disabled = true;
+// 加载按钮仅作视觉指示，实际由滚动自动触发
+
+// ============ 评论加载（去重 + 勾选保持 + 页码） ============
+let loadingMore = false;
+async function loadMore(){
+  if (loadingMore || !state.hasMore) return;
+  loadingMore = true;
+  $('moreBtn').textContent = '加载中…';
   try {
     const data = await fetchDouban(state.url, state.start);
-    state.comments.push(...(data.comments||[]));
-    state.start += (data.comments||[]).length;
-    state.hasMore = (data.comments||[]).length >= 95;
+    const news = data.comments || [];
+    // 去重：按 作者+内容+时间 组合键
+    const seen = new Set(state.comments.map(c => c.author+'|'+c.content+'|'+c.time));
+    const fresh = news.filter(c => !seen.has(c.author+'|'+c.content+'|'+c.time));
+    state.comments.push(...fresh);
+    state.start += news.length;
+    state.hasMore = news.length >= 95 && fresh.length > 0;
     renderComments();
-  } catch(e){ alert(e.message); }
-  $('moreBtn').disabled = false;
-};
+  } catch(e){ /* 静默，底部提示 */ }
+  $('moreBtn').textContent = '加载中…';
+  loadingMore = false;
+}
+// 滚动到底自动加载
+window.addEventListener('scroll', () => {
+  if ($('postCard').style.display === 'none' || $('pageMake').style.display === 'none') return;
+  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 300) loadMore();
+});
+// IntersectionObserver 兜底（部分手机浏览器）
+if ('IntersectionObserver' in window){
+  const io = new IntersectionObserver(es => { if (es[0].isIntersecting) loadMore(); }, { rootMargin: '200px' });
+  io.observe($('moreBtn'));
+}
 
-// ============ 评论列表（带点赞数） ============
+// ============ 评论列表（带点赞数，重渲染时保留勾选） ============
 function renderComments(){
+  // 记住已勾选的评论 key
+  const checkedKeys = new Set(
+    [...document.querySelectorAll('.cmt')].filter(el=>el.querySelector('input').checked)
+      .map(el => { const c = state.comments[+el.dataset.i]; return c ? c.author+'|'+c.content+'|'+c.time : null; }).filter(Boolean)
+  );
   const box = $('cmtList');
-  box.innerHTML = state.comments.map((c,i)=>`
-    <div class="cmt" data-i="${i}">
-      <input type="checkbox">
+  box.innerHTML = state.comments.map((c,i)=>{
+    const key = c.author+'|'+c.content+'|'+c.time;
+    const on = checkedKeys.has(key);
+    return `<div class="cmt${on?' selected':''}" data-i="${i}">
+      <input type="checkbox"${on?' checked':''}>
       <div class="body">
         <div class="who"><span>${esc(c.author||'匿名')} ${c.time||''}</span><span class="likes">👍 ${c.likes||0}</span></div>
         <div class="txt">${esc(c.content)}</div>
       </div>
-    </div>`).join('') || '<div class="empty">这篇帖子没有抓到评论，或帖子需要登录才能看评论。</div>';
+    </div>`;
+  }).join('') || '<div class="empty">这篇帖子没有抓到评论，或帖子需要登录才能看评论。</div>';
   box.querySelectorAll('.cmt').forEach(el=>{
     const toggle = on => { el.querySelector('input').checked = on; el.classList.toggle('selected', on); updateCount(); };
     el.querySelector('input').onchange = e => toggle(e.target.checked);
     el.querySelector('.body').onclick = () => toggle(!el.querySelector('input').checked);
   });
+  // 页码指示：当前已加载条数 / 豆瓣总评论数
+  const total = state.totalComments;
+  const shown = state.comments.length;
+  const pageInfo = $('pageInfo');
+  if (pageInfo){
+    if (total && shown < total) pageInfo.textContent = `${shown} / ${total} 条`;
+    else if (total) pageInfo.textContent = `共 ${total} 条，已全部加载`;
+    else pageInfo.textContent = `已加载 ${shown} 条`;
+  }
   $('moreBtn').style.display = state.hasMore ? 'block' : 'none';
   updateCount();
 }
@@ -451,19 +541,24 @@ $('makeBtn').onclick = async () => {
 function drawJournal(cmts){
   return new Promise((resolve, reject) => {
     try {
-      const W = 1000, M = 56;
+      // 画布宽度按设备自适应：手机用 720px 窄画布，同样字号在手机上显示更大
+      const isMobile = Math.min(screen.width, screen.height) <= 768;
+      const W = isMobile ? 720 : 1000;
+      const M = Math.round(W * 0.056);
       const cv = document.createElement('canvas');
       const ctx = cv.getContext('2d');
-      const maxW = W - M*2 - 64;
-      // 大字号：手机上不放大也看得清
-      ctx.font = `30px ${FONT}`;
+      const maxW = W - M*2 - Math.round(W*0.064);
+      // 字号随画布宽度缩放：手机画布窄、字号比例更大
+      const FS = { title: Math.round(W*0.042), cmt: Math.round(W*0.030), content: Math.round(W*0.026), meta: Math.round(W*0.024) };
+      ctx.font = `${FS.title}px ${FONT}`;
       const titleLines = wrapText(ctx, $('pTitle').textContent, maxW);
-      ctx.font = `26px ${FONT}`;
+      ctx.font = `${FS.content}px ${FONT}`;
       const contentLines = wrapText(ctx, ($('pContent').textContent||'').slice(0,500), maxW);
-      const cmtLines = cmts.map(c => { ctx.font = `28px ${FONT}`; return { who:c.author||'匿名', likes:c.likes||0, lines: wrapText(ctx, c.content, maxW-40) }; });
-      const titleH = 90 + titleLines.length*44;
-      const contentH = contentLines.length ? 50 + contentLines.length*42 : 0;
-      const cmtH = cmtLines.reduce((s,c)=> s + 100 + c.lines.length*42, 0);
+      const cmtLines = cmts.map(c => { ctx.font = `${FS.cmt}px ${FONT}`; return { who:c.author||'匿名', likes:c.likes||0, lines: wrapText(ctx, c.content, maxW-40) }; });
+      const LH = Math.round(W*0.042);
+      const titleH = 90 + titleLines.length*(FS.title+8);
+      const contentH = contentLines.length ? 50 + contentLines.length*(FS.content+16) : 0;
+      const cmtH = cmtLines.reduce((s,c)=> s + 100 + c.lines.length*(FS.cmt+14), 0);
       const H = Math.max(1000, M*2 + titleH + contentH + cmtH + 150);
 
       cv.width = W; cv.height = H;
@@ -480,51 +575,51 @@ function drawJournal(cmts){
 
       let y = M + 60;
       // 标题
-      ctx.fillStyle = '#4a4038'; ctx.font = `bold 42px ${FONT}`;
-      titleLines.forEach(l => { ctx.fillText(l, M, y); y += 50; });
+      ctx.fillStyle = '#4a4038'; ctx.font = `bold ${FS.title}px ${FONT}`;
+      titleLines.forEach(l => { ctx.fillText(l, M, y); y += FS.title+8; });
       y += 8;
       ctx.strokeStyle = '#e8837b'; ctx.lineWidth = 4; ctx.setLineDash([12,8]);
-      ctx.beginPath(); ctx.moveTo(M,y); ctx.lineTo(M+220,y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(M,y); ctx.lineTo(M+Math.round(W*0.22),y); ctx.stroke(); ctx.setLineDash([]);
       y += 34;
-      ctx.fillStyle = '#a09486'; ctx.font = `24px sans-serif`;
+      ctx.fillStyle = '#a09486'; ctx.font = `${FS.meta}px sans-serif`;
       ctx.fillText($('pMeta').textContent.split('·')[0].trim().slice(0,30), M, y);
       y += 32;
       // 原帖入口提示（不展示长链接）
-      ctx.fillStyle = '#e8837b'; ctx.font = `24px ${FONT}`;
+      ctx.fillStyle = '#e8837b'; ctx.font = `${FS.meta}px ${FONT}`;
       ctx.fillText('🔗 原帖：见页面「点击打开原帖」按钮', M, y);
       y += 40;
 
       // 正文摘要
       if (contentLines.length){
-        ctx.fillStyle = '#6b5f53'; ctx.font = `26px ${FONT}`;
-        contentLines.slice(0,12).forEach(l => { ctx.fillText(l, M, y); y += 40; });
-        if (contentLines.length > 12) { ctx.fillStyle='#b0a494'; ctx.font='22px sans-serif'; ctx.fillText('……（正文太长已截断）', M, y); y += 34; }
+        ctx.fillStyle = '#6b5f53'; ctx.font = `${FS.content}px ${FONT}`;
+        contentLines.slice(0,12).forEach(l => { ctx.fillText(l, M, y); y += FS.content+16; });
+        if (contentLines.length > 12) { ctx.fillStyle='#b0a494'; ctx.font=`${FS.meta}px sans-serif`; ctx.fillText('……（正文太长已截断）', M, y); y += 34; }
         y += 20;
       }
 
       // 评论便签（点赞倒序）
       cmtLines.forEach((c,idx) => {
-        const h = 66 + c.lines.length*42;
+        const h = 66 + c.lines.length*(FS.cmt+14);
         ctx.save();
         ctx.shadowColor = 'rgba(90,70,40,.18)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 5;
         ctx.fillStyle = NOTE_BG[idx % 4];
         roundRect(ctx, M + (idx%2? 14 : 0), y, W - M*2 - 24, h, 12); ctx.fill();
         ctx.restore();
         tape(ctx, W/2 + (idx%2? -34:34), y+5, 76, WASHI[idx % 4], (idx%2? -1:1)*.15);
-        ctx.fillStyle = '#e8837b'; ctx.font = 'bold 24px sans-serif';
+        ctx.fillStyle = '#e8837b'; ctx.font = `bold ${FS.meta}px sans-serif`;
         ctx.fillText('#' + (idx+1), M + 26, y + 42);
-        ctx.fillStyle = '#9a8f83'; ctx.font = '23px sans-serif';
-        ctx.fillText((c.who.slice(0,16) || '匿名'), M + 76, y + 42);
-        ctx.fillStyle = '#e8a19b'; ctx.font = '23px sans-serif'; ctx.textAlign='right';
+        ctx.fillStyle = '#9a8f83'; ctx.font = `${FS.meta}px sans-serif`;
+        ctx.fillText((c.who.slice(0,16) || '匿名'), M + Math.round(W*0.076), y + 42);
+        ctx.fillStyle = '#e8a19b'; ctx.font = `${FS.meta}px sans-serif`; ctx.textAlign='right';
         ctx.fillText('👍 ' + c.likes, W - M - 40, y + 42);
         ctx.textAlign='left';
-        ctx.fillStyle = '#4a4038'; ctx.font = `28px ${FONT}`;
+        ctx.fillStyle = '#4a4038'; ctx.font = `${FS.cmt}px ${FONT}`;
         let ly = y + 82;
-        c.lines.forEach(l => { ctx.fillText(l, M + 26, ly); ly += 42; });
+        c.lines.forEach(l => { ctx.fillText(l, M + 26, ly); ly += FS.cmt+14; });
         y += h + 26;
       });
 
-      ctx.fillStyle = '#c3b6a5'; ctx.font = '22px sans-serif'; ctx.textAlign='center';
+      ctx.fillStyle = '#c3b6a5'; ctx.font = `${FS.meta}px sans-serif`; ctx.textAlign='center';
       ctx.fillText('— 豆瓣手账 · ' + cmts.length + ' 条珍藏评论 —', W/2, H - 46);
       ctx.textAlign='left';
 
@@ -591,6 +686,46 @@ $('confirmSaveBook').onclick = () => {
   }
 };
 
+// ============ 手账查看灯箱（左右滑动） ============
+let lbEntries = [], lbIndex = 0;
+function openLightbox(entries, idx){
+  lbEntries = entries; lbIndex = idx;
+  $('lbTrack').innerHTML = entries.map(e=>`<div class="lb-item"><img src="${e.imgDataUrl}" alt=""></div>`).join('');
+  $('lightbox').classList.add('show');
+  document.body.style.overflow = 'hidden';
+  lbUpdate();
+  // 滚轮翻页（PC）
+  $('lbStage').onwheel = ev => { if (Math.abs(ev.deltaY) > 30) { ev.deltaY > 0 ? lbNext_() : lbPrev_(); } };
+}
+function lbUpdate(){
+  $('lbTrack').style.transform = `translateX(-${lbIndex*100}%)`;
+  $('lbCounter').textContent = `${lbIndex+1} / ${lbEntries.length}`;
+  $('lbTitle').textContent = lbEntries[lbIndex] ? (lbEntries[lbIndex].title + ' · ' + lbEntries[lbIndex].date) : '';
+  $('lbPrev').style.display = lbIndex > 0 ? 'flex' : 'none';
+  $('lbNext').style.display = lbIndex < lbEntries.length-1 ? 'flex' : 'none';
+}
+function lbPrev_(){ if (lbIndex > 0){ lbIndex--; lbUpdate(); } }
+function lbNext_(){ if (lbIndex < lbEntries.length-1){ lbIndex++; lbUpdate(); } }
+$('lbPrev').onclick = lbPrev_;
+$('lbNext').onclick = lbNext_;
+$('lbClose').onclick = () => { $('lightbox').classList.remove('show'); document.body.style.overflow=''; };
+$('lightbox').onclick = e => { if (e.target === $('lightbox') || e.target === $('lbStage')) $('lbClose').onclick(); };
+// 键盘左右键（PC）
+document.addEventListener('keydown', e => {
+  if (!$('lightbox').classList.contains('show')) return;
+  if (e.key === 'ArrowLeft') lbPrev_();
+  if (e.key === 'ArrowRight' || e.key === 'Escape') e.key === 'Escape' ? $('lbClose').onclick() : lbNext_();
+});
+// 触摸滑动（手机）
+let tx = null;
+$('lbStage').addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, {passive:true});
+$('lbStage').addEventListener('touchend', e => {
+  if (tx === null) return;
+  const dx = e.changedTouches[0].clientX - tx;
+  if (Math.abs(dx) > 50) { dx < 0 ? lbNext_() : lbPrev_(); }
+  tx = null;
+}, {passive:true});
+
 // ============ 手账本管理 ============
 let editingBookId = null;
 function renderBooks(){
@@ -601,7 +736,7 @@ function renderBooks(){
       ${b.cover ? `<img class="nb-cover" src="${b.cover}">` : `<div class="nb-cover" style="display:flex;align-items:center;justify-content:center;font-size:34px">📒</div>`}
       <div class="nb-info">
         <div class="nb-name">${esc(b.name)}</div>
-        <div class="nb-intro">${esc(b.intro||'')}</div>
+        <div class="nb-intro" style="${b.intro?'':'display:none'}">${esc(b.intro||'')}</div>
         <div class="nb-tags">${esc((b.tags||[]).map(t=>'#'+t).join(' '))}</div>
         <div class="nb-date">建于 ${b.createdAt} · ${b.entries.length} 篇</div>
       </div>
@@ -613,6 +748,7 @@ function openBook(id){
   $('booksHome').style.display='none'; $('bookDetail').style.display='block';
   $('bdName').textContent = b.name;
   $('bdIntro').textContent = b.intro||'';
+  $('bdIntro').style.display = b.intro ? 'block' : 'none';
   $('bdTags').textContent = (b.tags||[]).map(t=>'#'+t).join(' ');
   $('bdDate').textContent = '建于 ' + b.createdAt;
   $('entryEmpty').style.display = b.entries.length ? 'none':'block';
@@ -631,7 +767,7 @@ function openBook(id){
         saveBooks(books); openBook(id); return;
       }
       const e = b.entries.find(x=>x.id===el.dataset.id);
-      if (e) window.open(e.imgDataUrl, '_blank');
+      if (e) openLightbox(b.entries, b.entries.indexOf(e));
     };
   });
   $('editBookBtn').onclick = ()=>openBookModal(id);
