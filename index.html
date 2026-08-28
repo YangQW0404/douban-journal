@@ -94,8 +94,8 @@
   .lb-close{cursor:pointer;font-size:22px;color:#f0e8da;padding:4px 10px}
   .lb-stage{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;touch-action:pan-y}
   .lb-track{display:flex;transition:transform .28s ease;height:100%;align-items:center}
-  .lb-item{flex:0 0 100%;display:flex;align-items:center;justify-content:center;padding:10px}
-  .lb-item img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px;user-select:none;-webkit-user-drag:none}
+  .lb-item{flex:0 0 100%;display:flex;align-items:center;justify-content:center;padding:10px;height:100%;overflow:hidden}
+  .lb-item img{max-width:100%;max-height:calc(100vh - 130px);width:auto;height:auto;object-fit:contain;border-radius:6px;user-select:none;-webkit-user-drag:none}
   .lb-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.2);color:#fff;border:none;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
   .lb-prev{left:10px} .lb-next{right:10px}
   .lb-title{color:#c3b6a5;font-size:13px;text-align:center;padding:10px 20px 16px}
@@ -336,6 +336,11 @@ async function saveBooks(books){
 // 同步读缓存（页面加载时 hydrate 一次）；未初始化时返回 localStorage 原始数据
 function loadBooks(){ return booksCache || (booksCache = (function(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)) || []; }catch(e){ return []; } })()); }
 let booksCache = null;
+let hydratePromise = null;
+function ensureHydrated(){
+  if (!hydratePromise) hydratePromise = hydrateBooks();
+  return hydratePromise;
+}
 // 读取时把 idb:// 引用还原为真实图片
 async function hydrateBooks(){
   const books = loadBooks();
@@ -346,6 +351,7 @@ async function hydrateBooks(){
     }
   }
   booksCache = books;
+  hydratePromise = null;
   return books;
 }
 const SB_URL = window.SUPABASE_URL || '';
@@ -535,7 +541,7 @@ async function loadMore(){
     state.hasMore = state.totalComments ? (state.comments.length < state.totalComments) : (news.length > 0);
     renderComments();
   } catch(e){ /* 静默，底部提示 */ }
-  $('moreBtn').textContent = '加载中…';
+  $('moreBtn').textContent = '下拉自动加载更多评论 ↓';
   loadingMore = false;
 }
 // 滚动到底自动加载
@@ -874,12 +880,14 @@ $('confirmSaveBook').onclick = async () => {
 let lbEntries = [], lbIndex = 0;
 async function openLightbox(entries, idx){
   lbEntries = entries; lbIndex = idx;
-  // 轻量条目现场重绘；有图的直接用
-  const urls = [];
-  for (const e of entries){ urls.push(await entryImgOf(e)); }
-  $('lbTrack').innerHTML = urls.map(u=>`<div class="lb-item"><img src="${u}" alt=""></div>`).join('');
+  // 先开壳（立即响应），图片并行生成后填充
+  $('lbTrack').innerHTML = entries.map(()=>`<div class="lb-item"><div style="color:#c3b6a5;font-size:14px">绘制中…</div></div>`).join('');
   $('lightbox').classList.add('show');
   document.body.style.overflow = 'hidden';
+  lbUpdate();
+  const urls = await Promise.all(entries.map(e => entryImgOf(e)));
+  entries.forEach((e,i) => { if (!e.thumbDataUrl) e.thumbDataUrl = urls[i]; }); // 缓存复用
+  $('lbTrack').innerHTML = urls.map(u=>`<div class="lb-item"><img src="${u}" alt=""></div>`).join('');
   lbUpdate();
   // 滚轮翻页（PC）
   $('lbStage').onwheel = ev => { if (Math.abs(ev.deltaY) > 30) { ev.deltaY > 0 ? lbNext_() : lbPrev_(); } };
@@ -915,7 +923,8 @@ $('lbStage').addEventListener('touchend', e => {
 
 // ============ 手账本管理 ============
 let editingBookId = null;
-function renderBooks(){
+async function renderBooks(){
+  await ensureHydrated();
   const books = loadBooks();
   $('nbEmpty').style.display = books.length ? 'none' : 'block';
   $('nbGrid').innerHTML = books.map(b=>`
@@ -957,14 +966,15 @@ $('backBooks').onclick = ()=>{ $('booksHome').style.display='block'; $('bookDeta
 
 // ============ 条目渲染：九宫格 / 时间线 双视图 + 编辑操作 ============
 async function renderEntries(){
+  await ensureHydrated();
   const b = loadBooks().find(x=>x.id===currentBookId); if(!b) return;
-  // 轻量条目（无图）现场生成缩略图
-  for (const e of b.entries){
+  // 轻量条目（无图）并行生成缩略图（提速：串行改并行）
+  await Promise.all(b.entries.map(async e => {
     if (!e.thumbDataUrl){
       if (e.imgDataUrl && e.imgDataUrl.startsWith('data:')) e.thumbDataUrl = e.imgDataUrl;
-      else { const u = await entryImgOf(e); e.thumbDataUrl = u; }
+      else e.thumbDataUrl = await entryImgOf(e);
     }
-  }
+  }));
   $('viewGrid').classList.toggle('active', currentView==='grid');
   $('viewTimeline').classList.toggle('active', currentView==='timeline');
   $('entryEmpty').style.display = b.entries.length ? 'none':'block';
