@@ -61,6 +61,17 @@
   .nb-tags{font-size:11px;color:#e8837b;margin-bottom:4px}
   .nb-date{font-size:11px;color:#c3b6a5}
   .nb-entries{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+  /* 时间线视图 */
+  .tl-group{margin-bottom:22px}
+  .tl-date{font-size:15px;font-weight:600;color:var(--ink);padding:8px 0 10px;border-bottom:2px solid #f0e4d4;margin-bottom:12px;position:relative}
+  .tl-date::before{content:'';display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--accent);margin-right:8px}
+  .tl-row{display:flex;flex-wrap:wrap;gap:10px}
+  .tl-thumb{width:110px;height:150px;object-fit:cover;border-radius:8px;cursor:pointer;border:2px solid #fff;box-shadow:0 2px 8px rgba(90,70,40,.15);background:var(--paper)}
+  .viewSwitch{font-size:12px;color:#8a7f72;cursor:pointer;margin-left:10px}
+  .viewSwitch.active{color:var(--accent);font-weight:600}
+  /* 条目操作菜单 */
+  .entryOps{display:flex;gap:6px;padding:6px 8px;background:#faf6ef}
+  .entryOps button{flex:1;font-size:11px;padding:5px 4px;border-radius:6px;background:#fff;color:var(--ink);border:1px solid #eee4d4}
   .entry-card{border:2px solid #eee4d4;border-radius:10px;overflow:hidden;cursor:pointer;background:#fffdf9}
   .entry-thumb{width:100%;height:150px;object-fit:cover;display:block;background:var(--paper)}
   .entry-title{font-size:12px;padding:8px;line-height:1.4;height:48px;overflow:hidden;color:var(--ink)}
@@ -194,7 +205,11 @@
       <div class="card">
         <div class="toolbar">
           <span style="font-size:16px;font-weight:600" id="bdName"></span>
-          <span><button class="small ghost" id="editBookBtn">编辑</button> <button class="small ghost" id="delBookBtn">删除手账本</button></span>
+          <span>
+            <a class="viewSwitch active" id="viewGrid">九宫格</a>
+            <a class="viewSwitch" id="viewTimeline">时间线</a>
+            <button class="small ghost" id="editBookBtn">编辑</button> <button class="small ghost" id="delBookBtn">删除手账本</button>
+          </span>
         </div>
         <div class="nb-intro" id="bdIntro" style="height:auto"></div>
         <div class="nb-tags" id="bdTags" style="margin-bottom:10px"></div>
@@ -430,8 +445,8 @@ async function loadMore(){
     const seen = new Set(state.comments.map(c => c.author+'|'+c.content+'|'+c.time));
     const fresh = news.filter(c => !seen.has(c.author+'|'+c.content+'|'+c.time));
     state.comments.push(...fresh);
-    state.start += news.length;
-    state.hasMore = news.length >= 95 && fresh.length > 0;
+    state.start += 100; // 固定步长，与豆瓣分页对齐
+    state.hasMore = state.totalComments ? (state.comments.length < state.totalComments) : (news.length > 0);
     renderComments();
   } catch(e){ /* 静默，底部提示 */ }
   $('moreBtn').textContent = '加载中…';
@@ -531,7 +546,7 @@ $('makeBtn').onclick = async () => {
     currentEntry = {
       title: $('pTitle').textContent, url: state.url,
       author: $('pMeta').textContent, comments: cmts,
-      imgDataUrl: $('imgOut').src
+      imgDataUrl: '', fullDataUrl: ''
     };
     $('previewBox').scrollIntoView({behavior:'smooth', block:'start'});
   } catch(e){ alert('生成失败：' + e.message); }
@@ -639,8 +654,9 @@ function drawJournal(cmts){
           small.width = W*scale; small.height = H*scale;
           small.getContext('2d').drawImage(cv, 0, 0, small.width, small.height);
           currentEntry = currentEntry || {};
-          img.dataset.full = cv.toDataURL('image/jpeg', 0.85);
+          currentEntry.fullDataUrl = cv.toDataURL('image/jpeg', 0.85);
           currentEntry.imgDataUrl = small.toDataURL('image/jpeg', 0.8);
+          currentEntry.imgW = W; currentEntry.imgH = H;
         }, 'image/png');
       } else {
         applyUrl(cv.toDataURL('image/png'));
@@ -678,7 +694,7 @@ $('confirmSaveBook').onclick = () => {
   b.entries.unshift({ id: Date.now()+''+Math.floor(Math.random()*999),
     date: new Date().toLocaleDateString('zh-CN'),
     title: currentEntry.title, url: currentEntry.url,
-    imgDataUrl: currentEntry.imgDataUrl || $('imgOut').src,
+    imgDataUrl: (currentEntry.imgDataUrl && currentEntry.imgDataUrl.startsWith('data:')) ? currentEntry.imgDataUrl : (currentEntry.fullDataUrl || ''),
     comments: currentEntry.comments });
   if (saveBooks(books)) {
     alert('已存入手账本「' + b.name + '」✅');
@@ -743,7 +759,13 @@ function renderBooks(){
     </div>`).join('');
   $('nbGrid').querySelectorAll('.nb-card').forEach(el=> el.onclick = ()=>openBook(el.dataset.id));
 }
+let currentView = 'grid';
+let currentBookId = null;
+$('viewGrid').onclick = () => { currentView='grid'; renderEntries(); };
+$('viewTimeline').onclick = () => { currentView='timeline'; renderEntries(); };
+
 function openBook(id){
+  currentBookId = id;
   const b = loadBooks().find(x=>x.id===id); if(!b) return;
   $('booksHome').style.display='none'; $('bookDetail').style.display='block';
   $('bdName').textContent = b.name;
@@ -751,25 +773,7 @@ function openBook(id){
   $('bdIntro').style.display = b.intro ? 'block' : 'none';
   $('bdTags').textContent = (b.tags||[]).map(t=>'#'+t).join(' ');
   $('bdDate').textContent = '建于 ' + b.createdAt;
-  $('entryEmpty').style.display = b.entries.length ? 'none':'block';
-  $('entryGrid').innerHTML = b.entries.map(e=>`
-    <div class="entry-card" data-id="${e.id}">
-      <img class="entry-thumb" src="${e.imgDataUrl}">
-      <div class="entry-title">${esc(e.title)}<br><span style="color:#c3b6a5;font-size:11px">${e.date} · ${e.comments.length}条评论</span></div>
-      <span class="del" data-eid="${e.id}">删除</span>
-    </div>`).join('');
-  $('entryGrid').querySelectorAll('.entry-card').forEach(el=>{
-    el.onclick = ev => {
-      if (ev.target.classList.contains('del')) {
-        if (!confirm('删除这篇手账？')) return;
-        const books = loadBooks(); const b2 = books.find(x=>x.id===id);
-        b2.entries = b2.entries.filter(e=>e.id !== el.dataset.id);
-        saveBooks(books); openBook(id); return;
-      }
-      const e = b.entries.find(x=>x.id===el.dataset.id);
-      if (e) openLightbox(b.entries, b.entries.indexOf(e));
-    };
-  });
+  renderEntries();
   $('editBookBtn').onclick = ()=>openBookModal(id);
   $('delBookBtn').onclick = ()=>{
     if (!confirm('删除整个手账本「'+b.name+'」及其全部内容？此操作不可恢复。')) return;
@@ -779,6 +783,76 @@ function openBook(id){
   };
 }
 $('backBooks').onclick = ()=>{ $('booksHome').style.display='block'; $('bookDetail').style.display='none'; };
+
+// ============ 条目渲染：九宫格 / 时间线 双视图 + 编辑操作 ============
+function renderEntries(){
+  const b = loadBooks().find(x=>x.id===currentBookId); if(!b) return;
+  $('viewGrid').classList.toggle('active', currentView==='grid');
+  $('viewTimeline').classList.toggle('active', currentView==='timeline');
+  $('entryEmpty').style.display = b.entries.length ? 'none':'block';
+  const grid = $('entryGrid');
+  if (currentView === 'grid'){
+    grid.style.display = 'grid';
+    grid.innerHTML = b.entries.map(e=>`
+      <div class="entry-card" data-id="${e.id}">
+        <img class="entry-thumb" src="${e.imgDataUrl}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22150%22 height=%22150%22%3E%3Crect fill=%22%23faf6ef%22 width=%22150%22 height=%22150%22/%3E%3Ctext x=%2275%22 y=%2280%22 text-anchor=%22middle%22 fill=%22%23b0a494%22 font-size=%2212%22%3E图片已失效%3C/text%3E%3C/svg%3E'">
+        <div class="entry-title">${esc(e.title)}<br><span style="color:#c3b6a5;font-size:11px">${e.date} · ${(e.comments||[]).length}条评论</span></div>
+        <div class="entryOps">
+          <button data-act="move" data-id="${e.id}">移动</button>
+          <button data-act="del" data-id="${e.id}">删除</button>
+        </div>
+      </div>`).join('');
+  } else {
+    // 时间线：按日期倒序分组
+    grid.style.display = 'block';
+    const groups = {};
+    b.entries.forEach(e => { (groups[e.date||'未知日期'] = groups[e.date||'未知日期'] || []).push(e); });
+    const dates = Object.keys(groups).sort((a,b2)=>b2.localeCompare(a));
+    grid.innerHTML = dates.map(d=>`
+      <div class="tl-group">
+        <div class="tl-date">${esc(d)}</div>
+        <div class="tl-row">
+          ${groups[d].map(e=>`<img class="tl-thumb" src="${e.imgDataUrl}" data-id="${e.id}" title="${esc(e.title)}">`).join('')}
+        </div>
+      </div>`).join('') || '';
+  }
+  // 统一交互：点图片/卡片开灯箱，点按钮执行操作
+  grid.querySelectorAll('img[data-id], .entry-card').forEach(el=>{
+    el.onclick = ev => {
+      if (ev.target.dataset.act) return; // 按钮有自己的处理
+      const eid = el.dataset.id || el.closest('[data-id]').dataset.id;
+      const e = b.entries.find(x=>x.id===eid);
+      if (e) openLightbox(b.entries, b.entries.indexOf(e));
+    };
+  });
+  grid.querySelectorAll('.entryOps button').forEach(btn=>{
+    btn.onclick = ev => {
+      ev.stopPropagation();
+      const eid = btn.dataset.id;
+      if (btn.dataset.act === 'del'){
+        if (!confirm('删除这篇手账？')) return;
+        const books = loadBooks(); const b2 = books.find(x=>x.id===currentBookId);
+        b2.entries = b2.entries.filter(e=>e.id !== eid);
+        saveBooks(books); renderEntries();
+      } else if (btn.dataset.act === 'move'){
+        const books = loadBooks();
+        const others = books.filter(x=>x.id!==currentBookId);
+        if (!others.length){ alert('没有其他手账本可以移动，先新建一个～'); return; }
+        const names = others.map(o=>o.name).join('、');
+        const target = prompt('移动到哪个手账本？可选项：' + names, others[0].name);
+        if (!target) return;
+        const to = books.find(x=>x.name===target.trim() && x.id!==currentBookId);
+        if (!to){ alert('名字不对，请完整输入：' + names); return; }
+        const from = books.find(x=>x.id===currentBookId);
+        const idx = from.entries.findIndex(e=>e.id===eid);
+        to.entries.unshift(from.entries[idx]);
+        from.entries.splice(idx,1);
+        saveBooks(books); renderEntries();
+        alert('已移动到「'+to.name+'」✅');
+      }
+    };
+  });
+}
 
 function openBookModal(id){
   editingBookId = id || null;
